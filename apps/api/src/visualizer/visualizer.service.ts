@@ -1,0 +1,174 @@
+import { Injectable } from "@nestjs/common";
+import { InjectModel } from "@nestjs/sequelize";
+import { readdir } from "node:fs/promises";
+import { join } from "node:path";
+import { Configtv } from "../models/configtv.model";
+import { Tv } from "../models/tv.model";
+import { Video } from "../models/video.model";
+
+export interface VisualizerTurn {
+  idtv: number;
+  nombrePaciente: string;
+  modulo: string;
+  servicio: string;
+  turno: string;
+  descripcion: string;
+  estado: number;
+  nombre: string;
+  tipo: "PACIENTE" | "TURNO";
+}
+
+export interface VisualizerConfig {
+  mensaje: string;
+  tamanoLetra: number | null;
+  nombrelogo: string;
+  logo: string;
+  cambioTv: string;
+  volumenVoz: number | null;
+  ipVisualizador: string;
+  id: number;
+}
+
+export interface VisualizerVideo {
+  idVideo: number;
+  nombreVideo: string;
+  volumen: number | null;
+}
+
+const TZ = "America/Bogota";
+
+@Injectable()
+export class VisualizerService {
+  constructor(
+    @InjectModel(Tv) private readonly tvModel: typeof Tv,
+    @InjectModel(Configtv) private readonly configModel: typeof Configtv,
+    @InjectModel(Video) private readonly videoModel: typeof Video
+  ) {}
+
+  /** Lista de pantallas/visualizadores (valores distintos de configtv.estado). */
+  async screens(): Promise<number[]> {
+    const rows = await this.configModel.findAll({
+      attributes: ["estado"],
+      group: ["estado"],
+    });
+    return rows
+      .map((r) => r.estado)
+      .filter((v): v is number => v != null);
+  }
+
+  /** IP configurada para una pantalla (traerIpVisualizador). */
+  async ipVisualizador(screen: number): Promise<string | null> {
+    const row = await this.configModel.findOne({
+      where: { estado: screen },
+      attributes: ["IpVisualizador"],
+    });
+    return row?.IpVisualizador ?? null;
+  }
+
+  /** Configuracion del visualizador (cargarConfig). */
+  async config(screen: number): Promise<VisualizerConfig | null> {
+    const row = await this.configModel.findOne({ where: { estado: screen } });
+    if (!row) return null;
+    return {
+      mensaje: row.mensaje ?? "",
+      tamanoLetra: row.TamanoLetra,
+      nombrelogo: row.nombreLogo ?? "",
+      logo: row.nombreLogo ?? "",
+      cambioTv: row.CambioTv ?? "",
+      volumenVoz: row.VolumenVoz,
+      ipVisualizador: row.IpVisualizador ?? "",
+      id: row.id,
+    };
+  }
+
+  /** Videos asignados a la pantalla (cargarVideos). */
+  async videos(screen: number): Promise<VisualizerVideo[]> {
+    const rows = await this.videoModel.findAll({ where: { estado: screen } });
+    const seen = new Set<number>();
+    const out: VisualizerVideo[] = [];
+    for (const r of rows) {
+      if (seen.has(r.idvideo)) continue;
+      seen.add(r.idvideo);
+      out.push({
+        idVideo: r.idvideo,
+        nombreVideo: r.nombrevideo ?? "",
+        volumen: r.volumen,
+      });
+    }
+    return out;
+  }
+
+  /** Videos disponibles en disco, ordenados por su número de archivo. */
+  async availableVideos(): Promise<VisualizerVideo[]> {
+    const directory = join(__dirname, "..", "..", "public", "media", "videos");
+    const files = await readdir(directory, { withFileTypes: true });
+
+    return files
+      .filter((file) => file.isFile() && /^video\d+\.mp4$/i.test(file.name))
+      .sort((a, b) => {
+        const numberA = Number(a.name.match(/\d+/)?.[0]);
+        const numberB = Number(b.name.match(/\d+/)?.[0]);
+        return numberA - numberB;
+      })
+      .map((file, index) => ({
+        idVideo: index + 1,
+        nombreVideo: file.name.replace(/\.mp4$/i, ""),
+        volumen: 0,
+      }));
+  }
+
+  /** Llamado vigente de la pantalla, sin consumirlo (para el visor web). */
+  async current(screen: number): Promise<VisualizerTurn | null> {
+    const row = await this.tvModel.findOne({
+      where: { Estado: screen },
+      order: [["IdTv", "DESC"]],
+    });
+    return row ? this.mapTurn(row) : null;
+  }
+
+  /** Llamado mas antiguo pendiente, consumiendolo (legacy cargarTurno). */
+  async consume(screen: number): Promise<VisualizerTurn | null> {
+    const row = await this.tvModel.findOne({
+      where: { Estado: screen },
+      order: [["IdTv", "ASC"]],
+    });
+    if (!row) return null;
+    const mapped = this.mapTurn(row);
+    await row.destroy();
+    return mapped;
+  }
+
+  /** Fecha y hora formateadas (fechaHora). */
+  datetime(): { fecha: string; hora: string } {
+    const now = new Date();
+    const ymd = now.toLocaleDateString("en-CA", { timeZone: TZ });
+    const [y, m, d] = ymd.split("-");
+    const weekday = now.toLocaleDateString("es-CO", { timeZone: TZ, weekday: "long" });
+    const dia = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+    const hora = now
+      .toLocaleTimeString("en-US", {
+        timeZone: TZ,
+        hour: "numeric",
+        minute: "2-digit",
+        hour12: true,
+      })
+      .replace(/\u202f/g, " ");
+    return { fecha: `${dia} ${d}-${m}-${y}`, hora };
+  }
+
+  private mapTurn(row: Tv): VisualizerTurn {
+    const nombrePaciente = row.NombrePaciente ?? "";
+    const tienePaciente = nombrePaciente.trim() !== "";
+    return {
+      idtv: row.IdTv,
+      nombrePaciente,
+      modulo: row.Modulo ?? "",
+      servicio: row.Servicio ?? "",
+      turno: row.Turno ?? "",
+      descripcion: row.Descripcion ?? "",
+      estado: row.Estado ?? 0,
+      nombre: tienePaciente ? nombrePaciente : row.Turno ?? "",
+      tipo: tienePaciente ? "PACIENTE" : "TURNO",
+    };
+  }
+}

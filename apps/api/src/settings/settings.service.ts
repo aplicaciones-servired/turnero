@@ -1,0 +1,69 @@
+import { Injectable } from "@nestjs/common";
+import { InjectModel } from "@nestjs/sequelize";
+import { ConfigService } from "@nestjs/config";
+import type { SettingsDTO } from "@turnero/shared";
+import { Setting } from "../models/setting.model";
+import { Configtv } from "../models/configtv.model";
+import { Datosempresa } from "../models/datosempresa.model";
+import { UpdateSettingsDto } from "./dto/update-settings.dto";
+
+@Injectable()
+export class SettingsService {
+  constructor(
+    @InjectModel(Setting) private readonly model: typeof Setting,
+    @InjectModel(Configtv) private readonly configModel: typeof Configtv,
+    @InjectModel(Datosempresa) private readonly empresaModel: typeof Datosempresa,
+    private readonly config: ConfigService
+  ) {}
+
+  async get(): Promise<SettingsDTO> {
+    const [row] = await this.model.findOrCreate({ where: { id: 1 } });
+    return this.toDto(row);
+  }
+
+  async update(dto: UpdateSettingsDto): Promise<SettingsDTO> {
+    const [row] = await this.model.findOrCreate({ where: { id: 1 } });
+    const { marquee, voiceVolume, ...settingFields } = dto;
+    Object.assign(row, settingFields);
+    await row.save();
+
+    if (marquee !== undefined || voiceVolume !== undefined) {
+      const sedeId = this.sedeId;
+      const config = sedeId !== null
+        ? await this.configModel.findOne({ where: { IdSede: sedeId } })
+        : await this.configModel.findOne();
+      if (config) {
+        if (marquee !== undefined) config.mensaje = marquee;
+        if (voiceVolume !== undefined) config.VolumenVoz = voiceVolume;
+        await config.save();
+      }
+    }
+
+    return this.toDto(row);
+  }
+
+  private get sedeId(): number | null {
+    const raw = this.config.get<string>("SEDE_ID");
+    return raw ? Number(raw) : null;
+  }
+
+  private async toDto(s: Setting): Promise<SettingsDTO> {
+    const sedeId = this.sedeId;
+    const config = sedeId !== null
+      ? await this.configModel.findOne({ where: { IdSede: sedeId } })
+      : await this.configModel.findOne();
+    const empresa = await this.empresaModel.findOne();
+
+    return {
+      businessName: empresa?.NombreEmpresa ?? s.businessName,
+      ticketHeader: s.ticketHeader,
+      ticketFooter: s.ticketFooter,
+      announcePrefix: s.announcePrefix,
+      voiceRate: s.voiceRate,
+      voicePitch: s.voicePitch,
+      marquee: config?.mensaje ?? "",
+      logo: config?.nombreLogo ?? null,
+      voiceVolume: config?.VolumenVoz ?? 10,
+    };
+  }
+}

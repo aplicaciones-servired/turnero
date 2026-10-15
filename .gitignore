@@ -1,0 +1,32 @@
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+build/
+coverage/
+.vite/
+
+# Variables de entorno (NUNCA subir secretos)
+.env
+.env.local
+.env.*.local
+**/.env
+!**/.env.example
+.env.example
+
+# Volcados de base de datos (contienen datos reales)
+*.sql
+MagisoftV1.sql
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema
+.DS_Store
+Thumbs.db
+dbparts
+README.md
+turnero-master.zip
+opencode

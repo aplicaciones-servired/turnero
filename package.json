@@ -1,0 +1,28 @@
+{
+  "name": "turnero",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "prepare": "npm run build:shared",
+    "build:shared": "npm run build --workspace @turnero/shared",
+    "api": "npm run start:dev --workspace @turnero/api",
+    "api:build": "npm run build --workspace @turnero/api",
+    "api:seed": "npm run seed --workspace @turnero/api",
+    "kiosk": "npm run dev --workspace @turnero/kiosk",
+    "cashier": "npm run dev --workspace @turnero/cashier",
+    "display": "npm run dev --workspace @turnero/display",
+    "dev": "concurrently -n api,kiosk,cashier,display -c blue,green,yellow,magenta \"npm:api\" \"npm:kiosk\" \"npm:cashier\" \"npm:display\"",
+    "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
