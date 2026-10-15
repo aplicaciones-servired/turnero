@@ -6,7 +6,7 @@
 // Requisitos en el agente:
 //   - Docker Engine + plugin `docker compose`
 //   - `curl`
-//   - El archivo `deploy/.env` (credenciales reales) presente en el workspace
+//   - Credencial Jenkins tipo Secret file, ID `turnero-prod-env`, con el .env de produccion
 // =============================================================================
 pipeline {
     agent any
@@ -28,13 +28,11 @@ pipeline {
             steps {
                 sh 'docker version'
                 sh 'docker compose version'
-                sh '''
-                    if [ ! -f "${ENV_FILE}" ]; then
-                      echo "ERROR: falta ${ENV_FILE} en el workspace."
-                      echo "Copia deploy/.env.deploy.example y completa los valores reales."
-                      exit 1
-                    fi
-                '''
+                withCredentials([file(credentialsId: 'turnero-prod-env', variable: 'DEPLOY_ENV_CREDENTIAL')]) {
+                    sh '''
+                        install -m 600 "${DEPLOY_ENV_CREDENTIAL}" "${ENV_FILE}"
+                    '''
+                }
             }
         }
 
@@ -72,13 +70,14 @@ pipeline {
     post {
         success {
             echo "Desplegado en https://${env.DOMAIN} (kiosco /, caja /caja/, pantalla /pantalla/)"
-            archiveArtifacts artifacts: 'deploy/**', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'deploy/**', excludes: 'deploy/.env', allowEmptyArchive: true
         }
         failure {
             sh "docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} ps || true"
             sh "docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs --tail=150 || true"
         }
         always {
+            sh 'rm -f "${ENV_FILE}"'
             sh 'docker image prune -f || true'
         }
     }
