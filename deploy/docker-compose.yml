@@ -20,16 +20,12 @@ services:
       API_URL: https://turnero.serviredgane.cloud
       CORS_ORIGINS: https://turnero.serviredgane.cloud
       GRADLE_USER_HOME: /gradle-cache
-      # Impresora USB montada por device passthrough (ver deploy/README.md).
-      PRINTER_INTERFACE: ${PRINTER_INTERFACE:-/dev/usb/lp0}
       PRINTER_CHARACTER_SET: ${PRINTER_CHARACTER_SET:-PC850_MULTILINGUAL}
     volumes:
       - media:/app/apps/api/public/media
       - gradle-cache:/gradle-cache
       - android-build:/app/apps/display-android/app/build
       - apk-dist:/app/apps/display-android/dist
-    devices:
-      - "${PRINTER_DEVICE:-/dev/usb/lp0}:/dev/usb/lp0"
     networks:
       - internal
       - red-gane-int
