@@ -27,7 +27,6 @@ services:
       - android-build:/app/apps/display-android/app/build
       - apk-dist:/app/apps/display-android/dist
     networks:
-      - internal
       - red-gane-int
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
@@ -53,7 +52,7 @@ services:
     ports:
       - "${HTTP_PORT:-80}:80"
     networks:
-      - internal
+      - red-gane-int
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 30s
@@ -68,6 +67,5 @@ volumes:
   apk-dist:
 
 networks:
-  internal:
   red-gane-int:
     external: true
