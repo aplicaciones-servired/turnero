@@ -35,7 +35,7 @@ export function Login() {
         <h1 className="text-center text-2xl font-bold text-slate-800">Turnero</h1>
         <p className="mt-1 text-center text-sm text-slate-500">Acceso a caja</p>
 
-        <label className="mt-6 block text-sm font-medium text-slate-600">Usuario</label>
+        <label className="mt-6 block text-sm font-medium text-slate-600">Cédula</label>
         <input
           value={username}
           onChange={(e) => setUsername(e.target.value)}

@@ -67,7 +67,7 @@ export default function App() {
     }
   };
 
-  const businessName = settingsQuery.data?.businessName ?? "Autoservicio";
+  const businessName = 'GRUPO EMPRESARIAL SERVIRED';
 
   if (result) {
     return (

@@ -10,8 +10,8 @@ import { CurrentUser } from "./current-user.decorator";
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  // Maximo 5 intentos por minuto por IP (protege contra fuerza bruta)
-  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  // Limite por IP. En LAN todos comparten IP, asi que se deja generoso.
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @Post("login")
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto);

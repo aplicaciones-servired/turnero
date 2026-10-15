@@ -25,11 +25,22 @@ export class UsersService {
   }
 
   async validateLogin(username: string, password: string): Promise<AuthUser | null> {
+    const login = username.trim();
+    if (!login || !password) return null;
+
+    const user = await this.model.findOne({
+      where: { Cedula: login },
+    });
+    if (!user) return null;
+
     const hash = crypto.createHash("md5").update(password).digest("hex");
-    const user = await this.model.findOne({ where: { NombreUsuario: username } });
-    if (!user || (user.Contrasena ?? "").trim().toLowerCase() !== hash) {
-      return null;
-    }
+    const storedPassword = (user.Contrasena ?? "").trim();
+    const isMd5 = /^[a-f\d]{32}$/i.test(storedPassword);
+    const validPassword = isMd5
+      ? storedPassword.toLowerCase() === hash
+      : storedPassword === password;
+
+    if (!validPassword) return null;
     return this.toAuthUser(user);
   }
 

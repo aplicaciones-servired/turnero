@@ -69,9 +69,6 @@ export function AdminSettings() {
       </p>
 
       <div className="mt-5 space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-        <Field label="Nombre del negocio (MagisoftV1, solo lectura)">
-          <input className="input bg-slate-100" value={form.businessName} disabled />
-        </Field>
         <Field label="Mensaje de la pantalla (marquesina)">
           <textarea
             className="input"

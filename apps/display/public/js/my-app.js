@@ -33,7 +33,9 @@ var visualizador = 0;
 var videoA = 0;
 var videoFallas = 0;
 var videoFallback = false;
-var sigTurno = false;
+var socket = null;
+var ocultarTurnoTimer = null;
+var intervaloFecha = null;
 //
 function iniciar() {
     //
@@ -78,7 +80,10 @@ function iniciar() {
 
 function actualizarFecha() {
     consultarFecha();
-    setInterval(consultarFecha, 30010);
+    if (intervaloFecha) {
+        clearInterval(intervaloFecha);
+    }
+    intervaloFecha = setInterval(consultarFecha, 30010);
 }
 //
 function consultarFecha() {
@@ -148,7 +153,6 @@ function visualizadorSeleccionado(valor) {
     arrayV = [];
     visualizador = 0;
     videoA = 0;
-    sigTurno = false;
     //
     visualizador = valor;
     localStorage.visualizador = visualizador;
@@ -168,11 +172,309 @@ function traerIpVisualizador() {
             //
             if (data.length !== 2) {
                 //
-                consultarTurnos();
+                iniciarSocket();
                 cargarConfig();
                 cargarVideos();
             }
         });
+}
+
+//
+// ─────────────────────────────────────────────────────────────
+// Tiempo real (Socket.IO): cambios instantaneos, sin polling de turnos
+// ─────────────────────────────────────────────────────────────
+//
+function iniciarSocket() {
+    //
+    if (socket) {
+        return;
+    }
+    //
+    if (typeof io === 'undefined') {
+        setTimeout(iniciarSocket, 200);
+        return;
+    }
+    //
+    var base = apiBase.replace(/\/api\/?$/, '');
+    //
+    socket = io(base + '/realtime', {
+        transports: ['websocket', 'polling'],
+        reconnection: true
+    });
+    //
+    socket.on('connect', function () {
+        consultarSnapshot();
+    });
+    //
+    socket.on('queue:updated', function (data) {
+        setSnapshot(data);
+    });
+    //
+    socket.on('turn:called', function (payload) {
+        //
+        if (!payload || !payload.turn) {
+            return;
+        }
+        //
+        agregarLlamado(payload.turn, payload.counterName);
+        anunciarLlamado(payload.turn, payload.counterName);
+    });
+    //
+    socket.on('turn:finished', function (turn) {
+        quitarLlamado(turn);
+    });
+    //
+    socket.on('turn:skipped', function (turn) {
+        quitarLlamado(turn);
+    });
+}
+
+//
+function consultarSnapshot() {
+    //
+    app.request.get(apiBase + '/turns/snapshot',
+        function (rsp) {
+            //
+            try {
+                setSnapshot(JSON.parse(rsp));
+            } catch (e) {
+                console.warn("snapshot invalido", e);
+            }
+        },
+        function () {
+        });
+}
+
+//
+function setSnapshot(data) {
+    //
+    var now = (data && data.nowServing) ? data.nowServing : [];
+    //
+    arrayT = now.map(function (t) {
+        return {
+            id: String(t.id),
+            modulo: t.counterName || "",
+            nombre: t.code || "",
+            tipo: "TURNO"
+        };
+    });
+    //
+    renderLista();
+}
+
+//
+function agregarLlamado(turn, modulo) {
+    //
+    var id = String(turn.id);
+    var item = {
+        id: id,
+        modulo: modulo || "",
+        nombre: turn.code || "",
+        tipo: "TURNO"
+    };
+    //
+    var j = -1;
+    for (var i = 0; i < arrayT.length; i++) {
+        if (String(arrayT[i].id) === id || (arrayT[i].nombre && arrayT[i].nombre === item.nombre)) {
+            j = i;
+            break;
+        }
+    }
+    //
+    if (j === -1) {
+        arrayT.unshift(item);
+    } else {
+        arrayT.splice(j, 1);
+        arrayT.unshift(item);
+    }
+    //
+    if (arrayT.length > 5) {
+        arrayT = arrayT.slice(0, 5);
+    }
+    //
+    renderLista();
+}
+
+//
+function quitarLlamado(turn) {
+    //
+    if (!turn) {
+        return;
+    }
+    //
+    var id = String(turn.id);
+    var code = turn.code || "";
+    //
+    for (var i = 0; i < arrayT.length; i++) {
+        //
+        if (String(arrayT[i].id) === id || (code && arrayT[i].nombre === code)) {
+            //
+            arrayT.splice(i, 1);
+            renderLista();
+            return;
+        }
+    }
+}
+
+//
+function renderLista() {
+    //
+    for (var i = 0; i < 5; i++) {
+        //
+        if (i < arrayT.length) {
+            //
+            $$('#modulo' + i).html(arrayT[i]['modulo']);
+            $$('#cliente' + i).html(arrayT[i]['nombre']);
+        } else {
+            //
+            $$('#modulo' + i).html('');
+            $$('#cliente' + i).html('');
+        }
+    }
+}
+
+//
+function anunciarLlamado(turn, modulo) {
+    //
+    var nombre = (turn && turn.code) ? turn.code : "";
+    var tipo = "TURNO";
+    //
+    var llamado = formatearLlamado(nombre, tipo);
+    //
+    var htmlTurno = '<div style="background: rgb(147, 226, 250);width: 80%;height: 80%;display: flex;flex-direction: column;justify-content: center;align-items: center; border: 1px solid black">';
+    htmlTurno += '<h1 style="font-size: 400%; color:red">' + tipo + ', ' + nombre + '</h1>';
+    htmlTurno += '<h2 style="font-size: 400%; color:red">' + (modulo || "") + '</h2></div>';
+    //
+    var volumenVoz = 0;
+    //
+    if (arrayC && arrayC.volumenVoz != null) {
+        volumenVoz = parseInt(arrayC.volumenVoz);
+    }
+    //
+    if (isNaN(volumenVoz)) {
+        volumenVoz = 1;
+    }
+    //
+    volumenVoz = (volumenVoz === 0) ? 0.1 : (volumenVoz > 9) ? 1 : parseFloat("0." + volumenVoz);
+    //
+    var separados = llamado.split(" ");
+    var llamaarTurno = separados[0] + ' ';
+    var controlTurno = 0;
+    //
+    if (separados[1] === '0') {
+        controlTurno = 1;
+    } else {
+        llamaarTurno += separados[1];
+    }
+    //
+    if (controlTurno === 1) {
+        if (separados[2] === '0') {
+            llamaarTurno += separados[3];
+        } else {
+            llamaarTurno += separados[2];
+        }
+    }
+    //
+    var mensaje = "atencion " + tipo + " " + llamaarTurno + " diríjase a. " + (modulo || "");
+    //
+    voz(mensaje, volumenVoz);
+    $$('#visualizarTurno').html(htmlTurno);
+    //
+    animarConteo();
+    //
+    if (ocultarTurnoTimer) {
+        clearTimeout(ocultarTurnoTimer);
+    }
+    ocultarTurnoTimer = setTimeout(function () {
+        $$('#visualizarTurno').html('');
+    }, 8000);
+}
+
+//
+function formatearLlamado(nombre, tipo) {
+    //
+    if (tipo !== 'TURNO') {
+        return nombre;
+    }
+    //
+    var arreglo = nombre.split("");
+    var llamado = '';
+    var per = false;
+    var perTurno = true;
+    //
+    arreglo.forEach(function (item) {
+        //
+        if (per) {
+            //
+            if (perTurno) {
+                if (item === "0") {
+                    llamado += item;
+                    llamado += " ";
+                } else {
+                    llamado += item;
+                    perTurno = false;
+                }
+            } else {
+                llamado += item;
+            }
+
+        } else {
+            if (item === "-") {
+                //
+                llamado += " ";
+                per = true;
+            } else {
+                //
+                llamado += item;
+                llamado += ",";
+            }
+        }
+    });
+    //
+    return llamado;
+}
+
+//
+function animarConteo() {
+    //
+    var divCon = document.getElementById("conttL");
+    var divBorde = document.getElementById("divcontt");
+    //
+    if (!divCon || !divBorde) {
+        return;
+    }
+    //
+    var controlColorDiv = false;
+    var controlColorDivT = 0;
+    //
+    var intervaloC = setInterval(function () {
+        //
+        controlColorDivT++;
+        //
+        if (controlColorDiv) {
+            //
+            divCon.style.background = "linear-gradient(to bottom, rgba(43,123,160,1) 0%, rgba(16,63,84,1) 100%)";
+            divBorde.style.border = "2px #256e90 solid";
+            //
+            controlColorDiv = false;
+        } else {
+            //
+            divCon.style.background = "linear-gradient(to bottom, rgba(156,34,46,1) 0%, rgba(156,34,46,1) 12%, rgba(221,75,86,1) 100%)";
+            divBorde.style.border = "2px #c93e4a solid";
+            //
+            controlColorDiv = true;
+        }
+        //
+        if (controlColorDivT >= 10) {
+            //
+            divCon.style.background = "linear-gradient(to bottom, rgba(43,123,160,1) 0%, rgba(16,63,84,1) 100%)";
+            divBorde.style.border = "2px #256e90 solid";
+            //
+            clearInterval(intervaloC);
+            //
+            controlColorDivT = 0;
+        }
+    }, 1000);
 }
 
 //
@@ -269,142 +571,6 @@ function cargarConfig() {
 }
 
 //
-function actualizarTurnos() {
-    //
-    if (arrayT.length > 0) {
-        //
-        for (var i = 0; i < arrayT.length; i++) {
-            //
-            $$('#modulo' + i).html(arrayT[i]['modulo']);
-            $$('#cliente' + i).html(arrayT[i]['nombre']);
-        }
-        //
-        var llamado = '';
-        //
-        if (arrayT[0]['tipo'] === 'TURNO') {
-            //
-            var arreglo = arrayT[0]['nombre'].split("");
-            //
-            var per = false;
-            var perTurno = true;
-            //
-            arreglo.forEach(function (item) {
-                //
-                if (per) {
-                    //
-                    if (perTurno) {
-                        if (item === "0") {
-                            llamado += item;
-                            llamado += " ";
-                        } else {
-                            llamado += item;
-                            perTurno = false
-                        }
-                    } else {
-                        llamado += item;
-                    }
-
-                } else {
-                    if (item === "-") {
-                        //
-                        llamado += " ";
-                        per = true;
-                    } else {
-                        //
-                        llamado += item;
-                        llamado += ",";
-                    }
-                }
-            });
-        } else {
-            //
-            llamado = arrayT[0]['nombre'];
-        }
-        //
-        var controlColorDiv = false;
-        var controlColorDivT = 0;
-        //
-        var intervaloC = setInterval(function () {
-            //
-            controlColorDivT++;
-            //
-            if (controlColorDiv) {
-                //
-                document.getElementById("conttL").style.background = "linear-gradient(to bottom, rgba(43,123,160,1) 0%, rgba(16,63,84,1) 100%)";
-                document.getElementById("divcontt").style.border = "2px #256e90 solid";
-                //
-                controlColorDiv = false;
-            } else {
-                //
-                document.getElementById("conttL").style.background = "linear-gradient(to bottom, rgba(156,34,46,1) 0%, rgba(156,34,46,1) 12%, rgba(221,75,86,1) 100%)";
-                document.getElementById("divcontt").style.border = "2px #c93e4a solid";
-                //
-                controlColorDiv = true;
-            }
-            //
-            if (controlColorDivT >= 10) {
-                //
-                document.getElementById("conttL").style.background = "linear-gradient(to bottom, rgba(43,123,160,1) 0%, rgba(16,63,84,1) 100%)";
-                document.getElementById("divcontt").style.border = "2px #256e90 solid";
-                //
-                clearInterval(intervaloC);
-                //
-                controlColorDivT = 0;
-            }
-        }, 1000);
-        //
-        let htmlTurno = '<div style="background: rgb(147, 226, 250);width: 80%;height: 80%;display: flex;flex-direction: column;justify-content: center;align-items: center; border: 1px solid black">';
-        htmlTurno += '<h1 style="font-size: 400%; color:red">' + arrayT[0]['tipo'] + ', ' + arrayT[0]['nombre'] + '</h1>';
-        htmlTurno += '<h2 style="font-size: 400%; color:red">' + arrayT[0]['modulo'] + '</h2></div>';
-
-        //
-        var VolumenVoz = 0;
-        //
-        VolumenVoz = (parseInt(arrayC.volumenVoz));
-
-        VolumenVoz = (VolumenVoz === 0) ? 0.1 : VolumenVoz = (VolumenVoz > 9) ? 1 : parseFloat("0." + VolumenVoz);
-
-        //
-        var video = document.getElementById("video");
-        video.muted = true;
-        //
-        var llamaarTurno = '';
-        var separados = llamado.split(" ");
-        llamaarTurno += separados[0] + ' ';
-        var controlTurno = 0;
-
-        if (separados[1] === '0') {
-            controlTurno = 1;
-        } else {
-            llamaarTurno += separados[1];
-        }
-
-        if (controlTurno === 1) {
-            if (separados[2] === '0') {
-                llamaarTurno += separados[3];
-            } else {
-                llamaarTurno += separados[2];
-            }
-        }
-
-        var mensaje = "atencion " + arrayT[0]['tipo'] + " " + llamaarTurno + " diríjase a. " + arrayT[0]['modulo'];
-        clearInterval(intervalo);
-        voz(mensaje, VolumenVoz);
-        $$('#visualizarTurno').html(htmlTurno);
-        //
-        var intervalo = setInterval(function () {
-            //
-            $$('#visualizarTurno').html('');
-            consultarTurnos();
-            //
-            clearInterval(intervalo);
-        }, 8000);
-    }
-
-    actualizarFecha();
-}
-
-//
 function voz(text, volumen) {
     //
     var u = new SpeechSynthesisUtterance();
@@ -413,103 +579,6 @@ function voz(text, volumen) {
     u.lang = 'es-ES';
     u.volume = volumen;
     speechSynthesis.speak(u);
-}
-
-var intervalo = null;
-
-//
-function consultarTurnos() {
-    //
-    app.request.post(urlServer + '?accion=cargarTurno&visualizador=' + visualizador,
-        function (rsp) {
-            //
-            var data = JSON.parse(rsp);
-            //
-            if (data !== 2) {
-                //
-                if (data[0]['modulo'] === '#12#.3421D') {
-                    //
-                    cargarVideos();
-                    //
-                    cargarConfig();
-                    //
-                    siguienteTruno();
-                } else {
-                    //
-                    if (arrayT.length > 0) {
-                        //
-                        var j = -1;
-                        //
-                        for (var i = 0; i < arrayT.length; i++) {
-                            //
-                            if (arrayT[i]['nombre'] === data[0]['nombre'] && arrayT[i]['modulo'] === data[0]['modulo']) {
-                                //
-                                j = i;
-                            }
-                        }
-                        //
-                        if (j !== -1) {
-                            //
-                            while (j >= 0) {
-                                //
-                                if (j === 0) {
-                                    //
-                                    arrayT[j] = data[0];
-                                } else {
-                                    //
-                                    arrayT[j] = arrayT[j - 1];
-                                }
-                                //
-                                j--;
-                            }
-                        } else {
-                            //
-                            var k = arrayT.length;
-                            //
-                            if (k > 4) {
-                                //
-                                k = 4;
-                            }
-                            //
-                            while (k > 0) {
-                                //
-                                arrayT[k] = arrayT[k - 1];
-                                //
-                                k--;
-                                //
-                                if (k === 0) {
-                                    //
-                                    arrayT[k] = data[0];
-                                }
-                            }
-                        }
-                    } else {
-                        //
-                        arrayT[0] = data[0];
-                    }
-                    //
-                    actualizarTurnos();
-                }
-            } else {
-                //
-                siguienteTruno();
-            }
-        },
-        function (error) {
-            //
-            siguienteTruno();
-        });
-}
-
-//
-function siguienteTruno() {
-    //
-    var intervaloT2 = setInterval(function () {
-        //
-        consultarTurnos();
-        //
-        clearInterval(intervaloT2);
-    }, 5000);
 }
 
 //

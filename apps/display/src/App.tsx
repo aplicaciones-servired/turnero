@@ -36,7 +36,16 @@ export default function App() {
       setSnapshot(data);
     });
 
-    socket.on("queue:updated", (data: SnapshotDTO) => setSnapshot(data));
+    const updateQueue = (data: SnapshotDTO) => setSnapshot(data);
+    const removeFinishedTurn = (turn: TurnDTO) => {
+      setSnapshot((current) => ({
+        ...current,
+        nowServing: current.nowServing.filter((item) => item.id !== turn.id),
+      }));
+    };
+
+    socket.on("queue:updated", updateQueue);
+    socket.on("turn:finished", removeFinishedTurn);
 
     socket.on("turn:called", (payload: CallTurnPayload) => {
       setLatest(payload.turn);
@@ -49,6 +58,8 @@ export default function App() {
     });
 
     return () => {
+      socket.off("queue:updated", updateQueue);
+      socket.off("turn:finished", removeFinishedTurn);
       socket.disconnect();
     };
   }, []);

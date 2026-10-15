@@ -34,6 +34,9 @@ export interface FinishTurnInput {
   IdPersona?: number;
 }
 
+/** Cuantos llamados recientes se conservan por pantalla en la tabla `tv`. */
+const TV_KEEP = 30;
+
 export interface TransferTurnInput {
   IdTemporal: number;
   IdAuditoria: number;
@@ -277,9 +280,22 @@ export class TurnsService {
     for (const v of visualizadores) {
       const id = next++;
       await this.tvModel.create(this.tvRow(id, modulo, turno, "", v));
-      await this.tvModel.destroy({ where: { Estado: v, IdTv: { [Op.lt]: id } } });
+      await this.pruneTv(v);
     }
-    this.gateway.emitTurnCalled({ turn: null as never, counterName: modulo, announcement: turno });
+    const now = new Date().toISOString();
+    const synthetic: TurnDTO = {
+      id: `specific-${Date.now()}`,
+      number: Number(turno.replace(/[^0-9]/g, "")) || 0,
+      code: turno,
+      status: "called",
+      serviceId: "",
+      counterId: null,
+      counterName: modulo,
+      createdAt: now,
+      calledAt: now,
+      finishedAt: null,
+    };
+    this.gateway.emitTurnCalled({ turn: synthetic, counterName: modulo, announcement: turno });
     return { ok: true };
   }
 
@@ -372,7 +388,6 @@ export class TurnsService {
       );
     }
     this.gateway.emitTurnFinished(dto);
-    await this.broadcastSnapshot();
     return dto;
   }
 
@@ -660,8 +675,23 @@ export class TurnsService {
       await this.tvModel.create(
         this.tvRow(id, modulo, row.Turno ?? "", servicio?.Servicio ?? "", v)
       );
-      await this.tvModel.destroy({ where: { Estado: v, IdTv: { [Op.lt]: id } } });
+      await this.pruneTv(v);
     }
+  }
+
+  /** Conserva solo los ultimos TV_KEEP llamados por pantalla (no borra los recientes). */
+  private async pruneTv(screen: number): Promise<void> {
+    const keep = await this.tvModel.findAll({
+      where: { Estado: screen },
+      order: [["IdTv", "DESC"]],
+      limit: TV_KEEP,
+      attributes: ["IdTv"],
+    });
+    const ids = keep.map((k) => k.IdTv);
+    if (!ids.length) return;
+    await this.tvModel.destroy({
+      where: { Estado: screen, IdTv: { [Op.notIn]: ids } },
+    });
   }
 
   private tvRow(
