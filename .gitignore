@@ -23,6 +23,11 @@ MagisoftV1.sql
 *.log
 npm-debug.log*
 
+# Android / Gradle
+**/.gradle/
+apps/display-android/local.properties
+apps/display-android/apk-config.json
+
 # Sistema
 .DS_Store
 Thumbs.db
@@ -30,3 +35,4 @@ dbparts
 README.md
 turnero-master.zip
 opencode
+.env.deploy.example

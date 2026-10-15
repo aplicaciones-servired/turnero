@@ -43,9 +43,9 @@ function iniciar() {
     // respaldos si faltan los assets reales (logo/video)
     document.getElementById("logoCambiar").onerror = function () {
         //
-        if (this.getAttribute("src") !== "/img/default.png") {
+        if (this.getAttribute("src") !== "img/default.png") {
             //
-            this.setAttribute("src", "/img/default.png");
+            this.setAttribute("src", "img/default.png");
         }
     };
     document.getElementById("video").onerror = function () {

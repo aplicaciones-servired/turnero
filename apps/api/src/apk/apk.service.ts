@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { spawn } from "child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "fs";
-import { isAbsolute, join, resolve } from "path";
+import { isAbsolute, join, resolve, delimiter } from "path";
 
 export interface ApkConfig {
   url: string;
@@ -151,7 +151,7 @@ export class ApkService implements OnModuleInit {
         JAVA_HOME: javaHome,
         ANDROID_HOME: sdkDir,
         ANDROID_SDK_ROOT: sdkDir,
-        PATH: `${join(javaHome, "bin")};${process.env.PATH ?? ""}`,
+        PATH: `${join(javaHome, "bin")}${delimiter}${process.env.PATH ?? ""}`,
       };
 
       await this.exec(gradlew, ["assembleDebug", "--console=plain"], this.projectDir, env);
@@ -248,15 +248,19 @@ export class ApkService implements OnModuleInit {
     this.push(`strings.xml actualizado (url=${cfg.url || "VACIA"})`);
   }
 
-  /** Encuentra un JDK >= 17. */
+  /** Encuentra un JDK >= 17 (Windows o Linux). */
   private resolveJavaHome(): string | null {
     const override = process.env.APK_JAVA_HOME;
-    if (override && existsSync(join(override, "bin", "java.exe"))) return override;
+    if (override && hasJavaBin(override)) return override;
 
     const candidates: string[] = [];
     const envHome = process.env.JAVA_HOME;
     if (envHome) candidates.push(envHome);
-    for (const dir of ["C:\\Program Files\\Java", "C:\\Program Files\\Eclipse Adoptium"]) {
+    const roots =
+      process.platform === "win32"
+        ? ["C:\\Program Files\\Java", "C:\\Program Files\\Eclipse Adoptium"]
+        : ["/usr/lib/jvm", "/opt/java", "/opt/jdk"];
+    for (const dir of roots) {
       try {
         for (const e of readdirSync(dir, { withFileTypes: true })) {
           if (e.isDirectory()) candidates.push(join(dir, e.name));
@@ -265,14 +269,14 @@ export class ApkService implements OnModuleInit {
         /* no existe */
       }
     }
-    // Prefiere las versiones mas altas (jdk-20 > jdk-17 > jre-1.8)
+    // Prefiere las versiones mas altas (jdk-20 > jdk-17 > jre-1.8).
     const rank = (p: string) => {
-      const m = /jdk[-_]?(\d+)/i.exec(p);
+      const m = /(?:jdk|java)[-_]?(\d+)/i.exec(p);
       if (m) return 100 + parseInt(m[1], 10);
       return 0;
     };
     const valid = candidates
-      .filter((p) => existsSync(join(p, "bin", "java.exe")) && /jdk/i.test(p))
+      .filter((p) => hasJavaBin(p) && /jdk|java/i.test(p))
       .sort((a, b) => rank(b) - rank(a));
     return valid[0] ?? null;
   }
@@ -288,6 +292,10 @@ export class ApkService implements OnModuleInit {
     const found = candidates.find((p) => existsSync(p) && existsSync(join(p, "platform-tools")));
     return found ?? null;
   }
+}
+
+function hasJavaBin(dir: string): boolean {
+  return existsSync(join(dir, "bin", process.platform === "win32" ? "java.exe" : "java"));
 }
 
 function escapeXml(s: string): string {

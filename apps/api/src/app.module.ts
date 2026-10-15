@@ -4,6 +4,7 @@ import { ConfigModule } from "@nestjs/config";
 import { SequelizeModule } from "@nestjs/sequelize";
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { buildSequelizeOptions } from "./config/database.config";
+import { AppController } from "./app.controller";
 import { AuthModule } from "./auth/auth.module";
 import { UsersModule } from "./users/users.module";
 import { ServicesModule } from "./services/services.module";
@@ -29,6 +30,7 @@ import { VisualizerModule } from "./visualizer/visualizer.module";
     VisualizerModule,
     SettingsModule,
   ],
+  controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule {}

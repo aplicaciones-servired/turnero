@@ -1,0 +1,85 @@
+// =============================================================================
+// Pipeline de despliegue del turnero.
+// Todo corre en el mismo servidor: Jenkins construye las imagenes y levanta
+// el stack con docker compose. No se usa registry externo.
+//
+// Requisitos en el agente:
+//   - Docker Engine + plugin `docker compose`
+//   - `curl`
+//   - El archivo `deploy/.env` (credenciales reales) presente en el workspace
+// =============================================================================
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        skipDefaultCheckout(false)
+    }
+
+    environment {
+        COMPOSE_FILE = "deploy/docker-compose.yml"
+        ENV_FILE     = "deploy/.env"
+        DOMAIN       = "turnero.serviredgane.cloud"
+    }
+
+    stages {
+        stage('Preparar') {
+            steps {
+                sh 'docker version'
+                sh 'docker compose version'
+                sh '''
+                    if [ ! -f "${ENV_FILE}" ]; then
+                      echo "ERROR: falta ${ENV_FILE} en el workspace."
+                      echo "Copia deploy/.env.deploy.example y completa los valores reales."
+                      exit 1
+                    fi
+                '''
+            }
+        }
+
+        stage('Build imagenes') {
+            steps {
+                sh "docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} build --pull"
+            }
+        }
+
+        stage('Desplegar') {
+            steps {
+                sh "docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} up -d --remove-orphans"
+            }
+        }
+
+        stage('Verificar') {
+            steps {
+                // Espera a que el API responda a traves de nginx.
+                sh '''
+                    for i in $(seq 1 40); do
+                      if curl -fsS http://127.0.0.1/api/health > /dev/null; then
+                        echo "API OK"; curl -s http://127.0.0.1/api/health; echo
+                        exit 0
+                      fi
+                      sleep 3
+                    done
+                    echo "El API no respondio a tiempo"
+                    docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs --tail=120 api
+                    exit 1
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Desplegado en https://${env.DOMAIN} (kiosco /, caja /caja/, pantalla /pantalla/)"
+            archiveArtifacts artifacts: 'deploy/**', allowEmptyArchive: true
+        }
+        failure {
+            sh "docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} ps || true"
+            sh "docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs --tail=150 || true"
+        }
+        always {
+            sh 'docker image prune -f || true'
+        }
+    }
+}

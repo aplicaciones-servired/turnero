@@ -1,0 +1,41 @@
+# Dependencias y artefactos de build
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+.vite
+**/.vite
+coverage
+
+# Control de versiones / tooling
+.git
+.gitignore
+opencode
+*.zip
+*.log
+npm-debug.log*
+
+# Secretos
+.env
+.env.*
+!deploy/.env.deploy.example
+
+# Base de datos (volcados reales)
+dbparts
+*.sql
+*.sql.gz
+
+# Gradle / Android (se regeneran en el build)
+apps/display-android/.gradle
+apps/display-android/app/build
+apps/display-android/build
+apps/display-android/local.properties
+apps/display-android/dist
+
+# Distribucion local de Gradle (el wrapper la descarga)
+tools
+
+# Documentacion
+README.md

@@ -1,0 +1,77 @@
+# =============================================================================
+# Turnero - stack de produccion (mismo servidor: Docker + nginx).
+# Uso:  docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build
+# =============================================================================
+name: turnero
+
+services:
+  api:
+    image: turnero-api:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      API_PORT: "3001"
+      # API_URL publica (informativo); el front usa rutas relativas /api.
+      API_URL: https://turnero.serviredgane.cloud
+      CORS_ORIGINS: https://turnero.serviredgane.cloud
+      GRADLE_USER_HOME: /gradle-cache
+      # Impresora USB montada por device passthrough (ver deploy/README.md).
+      PRINTER_INTERFACE: ${PRINTER_INTERFACE:-/dev/usb/lp0}
+      PRINTER_CHARACTER_SET: ${PRINTER_CHARACTER_SET:-PC850_MULTILINGUAL}
+    volumes:
+      - media:/app/apps/api/public/media
+      - gradle-cache:/gradle-cache
+      - android-build:/app/apps/display-android/app/build
+      - apk-dist:/app/apps/display-android/dist
+    devices:
+      - "${PRINTER_DEVICE:-/dev/usb/lp0}:/dev/usb/lp0"
+    networks:
+      - internal
+      - red-gane-int
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  web:
+    image: turnero-web:latest
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        VITE_API_URL: /api
+        VITE_MEDIA_URL: /media
+        CASHIER_BASE: /caja/
+        DISPLAY_BASE: /pantalla/
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+volumes:
+  media:
+  gradle-cache:
+  android-build:
+  apk-dist:
+
+networks:
+  internal:
+  red-gane-int:
+    external: true
