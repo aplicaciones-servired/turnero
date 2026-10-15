@@ -6,15 +6,17 @@ import { CallPanel } from "./components/CallPanel";
 import { AdminTurns } from "./components/AdminTurns";
 import { AdminServices } from "./components/AdminServices";
 import { AdminSettings } from "./components/AdminSettings";
+import { AdminDisplay } from "./components/AdminDisplay";
 import { AdminUsers } from "./components/AdminUsers";
 
-type Tab = "call" | "turns" | "services" | "settings" | "users";
+type Tab = "call" | "turns" | "services" | "settings" | "display" | "users";
 
 const ADMIN_TABS: { id: Tab; label: string }[] = [
   { id: "call", label: "Llamados" },
   { id: "turns", label: "Todos los turnos" },
   { id: "services", label: "Servicios" },
   { id: "settings", label: "Impresion y voz" },
+  { id: "display", label: "Pantalla (APK)" },
   { id: "users", label: "Usuarios" },
 ];
 
@@ -87,6 +89,7 @@ export default function App() {
         {isAdmin && tab === "turns" && <AdminTurns />}
         {isAdmin && tab === "services" && <AdminServices />}
         {isAdmin && tab === "settings" && <AdminSettings />}
+        {isAdmin && tab === "display" && <AdminDisplay />}
         {isAdmin && tab === "users" && <AdminUsers />}
       </main>
     </div>

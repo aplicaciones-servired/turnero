@@ -2,7 +2,7 @@
 import { ConfigService } from "@nestjs/config";
 import { execFileSync, spawn } from "child_process";
 import type { ChildProcess } from "child_process";
-import { existsSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { isAbsolute, resolve } from "path";
 import {
   CharacterSet,
@@ -26,11 +26,13 @@ export class PrinterService {
   private readonly logger = new Logger("Printer");
   private readonly iface: string;
   private readonly winName: string | null;
-  private readonly width: number;
+  private readonly defaultWidth: number;
   private readonly charset: CharacterSet;
-  private readonly logoPath: string | null;
-  private readonly qrTemplate: string | null;
-  private readonly openDrawer: boolean;
+  private readonly envLogoPath: string | null;
+  private readonly envQrTemplate: string | null;
+  private readonly envOpenDrawer: boolean;
+  /** Carpeta donde viven los logos imprimibles (public/media/imagenes). */
+  private readonly logosDir: string;
 
   /** Worker PowerShell persistente para impresion RAW (evita recompilar/arrancar por ticket). */
   private worker: ChildProcess | null = null;
@@ -65,7 +67,8 @@ export class PrinterService {
       this.iface = rawIface;
     }
 
-    this.width = Number(config.get("PRINTER_WIDTH") ?? 48);
+    this.defaultWidth = Number(config.get("PRINTER_WIDTH") ?? 48);
+    this.logosDir = resolve(process.cwd(), "public/media/imagenes");
 
     const rawCharset = (config.get<string>("PRINTER_CHARACTER_SET") ?? "").trim();
     const valid = Object.values(CharacterSet) as string[];
@@ -79,17 +82,17 @@ export class PrinterService {
     }
 
     const logo = (config.get<string>("PRINTER_LOGO") ?? "").trim();
-    this.logoPath = logo ? (isAbsolute(logo) ? logo : resolve(process.cwd(), logo)) : null;
+    this.envLogoPath = logo ? (isAbsolute(logo) ? logo : resolve(process.cwd(), logo)) : null;
 
     const qr = (config.get<string>("PRINTER_QR_TEMPLATE") ?? "").trim();
-    this.qrTemplate = qr || null;
+    this.envQrTemplate = qr || null;
 
-    this.openDrawer = (config.get<string>("PRINTER_OPEN_DRAWER") ?? "false") === "true";
+    this.envOpenDrawer = (config.get<string>("PRINTER_OPEN_DRAWER") ?? "false") === "true";
 
     this.logger.log(
       `Printer: ${this.winName ? `winspool -> ${this.winName}` : this.iface || "SIMULADO"} | ` +
-        `charset=${this.charset} width=${this.width}` +
-        (this.logoPath ? ` logo=${this.logoPath}` : "")
+        `charset=${this.charset} width=${this.defaultWidth}` +
+        (this.envLogoPath ? ` logo=${this.envLogoPath}` : "")
     );
 
     // Precalienta el worker (compila el helper una sola vez).
@@ -143,13 +146,40 @@ export class PrinterService {
     }
   }
 
-  private build(): ThermalPrinter {
+  private build(width?: number): ThermalPrinter {
     return new ThermalPrinter({
       type: PrinterTypes.EPSON,
       interface: this.iface,
       characterSet: this.charset,
-      width: this.width,
+      width: width && width > 0 ? width : this.defaultWidth,
     });
+  }
+
+  /** Resuelve la ruta del logo imprimible segun la config (o el de respaldo del .env). */
+  private resolveLogo(settings: SettingsDTO): string | null {
+    if (!settings.printLogo) return null;
+    const file = (settings.printLogoFile ?? "").trim();
+    if (file) {
+      const p = isAbsolute(file) ? file : resolve(this.logosDir, file);
+      if (existsSync(p) && p.toLowerCase().endsWith(".png")) return p;
+    }
+    return this.envLogoPath && existsSync(this.envLogoPath) ? this.envLogoPath : null;
+  }
+
+  /** URL del QR a partir de la plantilla ({turno} y {servicio}). */
+  private buildQrUrl(settings: SettingsDTO, turn: TurnDTO, service: ServiceDTO): string | null {
+    const template = (settings.printQrTemplate ?? "").trim() || this.envQrTemplate || "";
+    if (!settings.printShowQr || !template) return null;
+    return template
+      .replace(/\{turno\}/g, encodeURIComponent(turn.code))
+      .replace(/\{servicio\}/g, encodeURIComponent(service.name));
+  }
+
+  /** Escala de texto segun la opcion elegida (normal/double/triple/quad). */
+  private applyTurnSize(printer: ThermalPrinter, size: string): void {
+    const map: Record<string, number> = { normal: 0, double: 1, triple: 2, quad: 3 };
+    const n = map[(size ?? "quad").toLowerCase()] ?? 3;
+    printer.setTextSize(n, n);
   }
 
   /** Imprime el ticket del turno. */
@@ -165,7 +195,7 @@ export class PrinterService {
 
     let printer: ThermalPrinter;
     try {
-      printer = this.build();
+      printer = this.build(settings.printWidth);
       await this.fillTicket(printer, turn, service, settings);
     } catch (err) {
       this.logger.error(`Error preparando ticket ${turn.code}: ${(err as Error).message}`);
@@ -210,47 +240,42 @@ export class PrinterService {
     service: ServiceDTO,
     settings: SettingsDTO
   ): Promise<void> {
-    const header = service.printHeader || settings.ticketHeader || "";
-    const footer = service.printFooter || settings.ticketFooter || "";
+    const header = (service.printHeader || "").trim() || settings.ticketHeader || "";
+    const footer = (service.printFooter || "").trim() || settings.ticketFooter || "";
 
     printer.alignCenter();
 
-    if (
-      this.logoPath &&
-      existsSync(this.logoPath) &&
-      this.logoPath.toLowerCase().endsWith(".png")
-    ) {
+    const logo = this.resolveLogo(settings);
+    if (logo) {
       try {
-        await printer.printImage(this.logoPath);
+        await printer.printImage(logo);
       } catch (err) {
-        this.logger.warn(
-          `No se pudo imprimir el logo (${this.logoPath}): ${(err as Error).message}`
-        );
+        this.logger.warn(`No se pudo imprimir el logo (${logo}): ${(err as Error).message}`);
       }
     }
 
     printer.setTextNormal();
-    if (header) printer.println(header);
-    printer.newLine();
+    if (settings.printShowHeader && header) printer.println(header);
+    if (settings.printShowHeader && header) printer.newLine();
 
     printer.setTextNormal();
     printer.println("TURNO");
-    printer.setTextQuadArea();
+    this.applyTurnSize(printer, settings.printTurnSize);
     printer.bold(true);
     printer.println(turn.code);
     printer.bold(false);
     printer.setTextNormal();
     printer.newLine();
 
-    printer.println(service.name);
-    printer.drawLine();
-    printer.println(new Date(turn.createdAt ?? Date.now()).toLocaleString("es-CO"));
+    if (settings.printShowService) printer.println(service.name);
+    if (settings.printShowService || settings.printShowDate) printer.drawLine();
+    if (settings.printShowDate) {
+      printer.println(new Date(turn.createdAt ?? Date.now()).toLocaleString("es-CO"));
+    }
     printer.newLine();
 
-    if (this.qrTemplate) {
-      const qr = this.qrTemplate
-        .replace("{turno}", encodeURIComponent(turn.code))
-        .replace("{servicio}", encodeURIComponent(service.name));
+    const qr = this.buildQrUrl(settings, turn, service);
+    if (qr) {
       try {
         printer.printQR(qr, { cellSize: 6, correction: "M", model: 2 });
         printer.newLine();
@@ -259,11 +284,123 @@ export class PrinterService {
       }
     }
 
-    if (footer) printer.println(footer);
-    printer.newLine();
-    printer.newLine();
-    printer.cut();
-    if (this.openDrawer) printer.openCashDrawer();
+    if (settings.printShowFooter && footer) printer.println(footer);
+    for (let i = 0; i < Math.max(0, settings.printFeed ?? 2); i++) printer.newLine();
+    if (settings.printCut) printer.cut();
+    if (settings.printOpenDrawer || this.envOpenDrawer) printer.openCashDrawer();
+  }
+
+  /** Lista los logos PNG disponibles en public/media/imagenes. */
+  listLogos(): string[] {
+    try {
+      if (!existsSync(this.logosDir)) return [];
+      return readdirSync(this.logosDir)
+        .filter((f) => f.toLowerCase().endsWith(".png"))
+        .sort((a, b) => a.localeCompare(b));
+    } catch {
+      return [];
+    }
+  }
+
+  /** Informacion de la impresora para el panel de admin. */
+  getInfo(): {
+    connected: boolean;
+    printerName: string | null;
+    interface: string;
+    width: number;
+    mode: string;
+    logos: string[];
+    qrTemplate: string;
+    openDrawer: boolean;
+  } {
+    return {
+      connected: Boolean(this.winName || this.iface),
+      printerName: this.winName,
+      interface: this.winName ? `win:${this.winName}` : this.iface || "simulado",
+      width: this.defaultWidth,
+      mode: this.winName ? "winspool" : this.iface ? "interface" : "simulado",
+      logos: this.listLogos(),
+      qrTemplate: this.envQrTemplate ?? "",
+      openDrawer: this.envOpenDrawer,
+    };
+  }
+
+  /** Genera una previsualizacion de texto (ancho en columnas) del ticket. */
+  preview(turn: TurnDTO, service: ServiceDTO, settings: SettingsDTO): { width: number; lines: string[] } {
+    const width = settings.printWidth && settings.printWidth > 0 ? settings.printWidth : this.defaultWidth;
+    const lines: string[] = [];
+    const header = (service.printHeader || "").trim() || settings.ticketHeader || "";
+    const footer = (service.printFooter || "").trim() || settings.ticketFooter || "";
+    const center = (t: string) => {
+      const s = String(t ?? "");
+      if (s.length >= width) return s;
+      const pad = Math.floor((width - s.length) / 2);
+      return " ".repeat(pad) + s;
+    };
+
+    if (settings.printLogo) {
+      const file = (settings.printLogoFile ?? "").trim() || "logoTiket.png";
+      lines.push(center(`[ LOGO: ${file} ]`));
+    }
+    if (settings.printShowHeader && header) {
+      lines.push(...header.split("\n").map((l) => center(l)));
+    }
+    lines.push(center("TURNO"));
+    lines.push(center(turn.code));
+    lines.push("");
+    if (settings.printShowService) lines.push(center(service.name));
+    if (settings.printShowService || settings.printShowDate) lines.push("-".repeat(width));
+    if (settings.printShowDate) {
+      lines.push(center(new Date(turn.createdAt ?? Date.now()).toLocaleString("es-CO")));
+    }
+    lines.push("");
+    const qr = this.buildQrUrl(settings, turn, service);
+    if (qr) {
+      lines.push(center("[ QR ]"));
+      for (let i = 0; i < qr.length; i += width) lines.push(qr.slice(i, i + width));
+    }
+    if (settings.printShowFooter && footer) {
+      lines.push(...footer.split("\n").map((l) => center(l)));
+    }
+    for (let i = 0; i < Math.max(0, settings.printFeed ?? 2); i++) lines.push("");
+    if (settings.printCut) lines.push(center("✂ - - - - - - - - - - - - -"));
+    if (settings.printOpenDrawer || this.envOpenDrawer) lines.push(center("[ ABRIR CAJON ]"));
+
+    return { width, lines };
+  }
+
+  /** Imprime un ticket de prueba con datos ficticios. */
+  async printSample(
+    settings: SettingsDTO,
+    serviceName = "Servicio de prueba",
+    turnCode = "A-000"
+  ): Promise<{ printed: boolean }> {
+    const service: ServiceDTO = {
+      id: "0",
+      name: serviceName,
+      prefix: "A",
+      active: true,
+      order: 1,
+      color: "#000000",
+      printHeader: null,
+      printFooter: null,
+    };
+    const now = new Date().toISOString();
+    const turn: TurnDTO = {
+      id: "0",
+      number: 0,
+      code: turnCode,
+      status: "waiting",
+      serviceId: "0",
+      serviceName,
+      servicePrefix: "A",
+      counterId: null,
+      counterName: null,
+      createdAt: now,
+      calledAt: null,
+      finishedAt: null,
+    };
+    return this.printTurn(turn, service, settings);
   }
 
   /** Crea (si hace falta) el worker PowerShell persistente que compila el helper UNA vez. */

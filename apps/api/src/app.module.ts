@@ -10,6 +10,7 @@ import { ServicesModule } from "./services/services.module";
 import { TurnsModule } from "./turns/turns.module";
 import { SettingsModule } from "./settings/settings.module";
 import { PrinterModule } from "./printer/printer.module";
+import { ApkModule } from "./apk/apk.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { VisualizerModule } from "./visualizer/visualizer.module";
 
@@ -19,6 +20,7 @@ import { VisualizerModule } from "./visualizer/visualizer.module";
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 120 }]),
     SequelizeModule.forRoot(buildSequelizeOptions()),
     PrinterModule,
+    ApkModule,
     RealtimeModule,
     AuthModule,
     UsersModule,

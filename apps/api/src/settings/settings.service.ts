@@ -64,6 +64,19 @@ export class SettingsService {
       marquee: config?.mensaje ?? "",
       logo: config?.nombreLogo ?? null,
       voiceVolume: config?.VolumenVoz ?? 10,
+      printWidth: s.printWidth ?? 48,
+      printLogo: Boolean(s.printLogo),
+      printLogoFile: s.printLogoFile ?? "logoTiket.png",
+      printShowHeader: Boolean(s.printShowHeader),
+      printShowService: Boolean(s.printShowService),
+      printShowDate: Boolean(s.printShowDate),
+      printShowQr: Boolean(s.printShowQr),
+      printQrTemplate: s.printQrTemplate ?? "",
+      printShowFooter: Boolean(s.printShowFooter),
+      printTurnSize: s.printTurnSize ?? "quad",
+      printFeed: s.printFeed ?? 2,
+      printCut: Boolean(s.printCut),
+      printOpenDrawer: Boolean(s.printOpenDrawer),
     };
   }
 }

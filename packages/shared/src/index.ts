@@ -55,6 +55,20 @@ export interface SettingsDTO {
   marquee: string;
   logo: string | null;
   voiceVolume: number;
+  // Impresion del ticket
+  printWidth: number;
+  printLogo: boolean;
+  printLogoFile: string;
+  printShowHeader: boolean;
+  printShowService: boolean;
+  printShowDate: boolean;
+  printShowQr: boolean;
+  printQrTemplate: string;
+  printShowFooter: boolean;
+  printTurnSize: string;
+  printFeed: number;
+  printCut: boolean;
+  printOpenDrawer: boolean;
 }
 
 export interface CallTurnPayload {

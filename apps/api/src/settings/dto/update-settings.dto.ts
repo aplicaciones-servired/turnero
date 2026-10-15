@@ -1,4 +1,13 @@
-import { IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Max,
+  Min,
+} from "class-validator";
 
 export class UpdateSettingsDto {
   @IsOptional()
@@ -38,4 +47,61 @@ export class UpdateSettingsDto {
   @Min(0)
   @Max(100)
   voiceVolume?: number;
+
+  // ── Impresion del ticket ──
+  @IsOptional()
+  @IsInt()
+  @Min(20)
+  @Max(80)
+  printWidth?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  printLogo?: boolean;
+
+  @IsOptional()
+  @IsString()
+  printLogoFile?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  printShowHeader?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  printShowService?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  printShowDate?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  printShowQr?: boolean;
+
+  @IsOptional()
+  @IsString()
+  printQrTemplate?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  printShowFooter?: boolean;
+
+  @IsOptional()
+  @IsIn(["normal", "double", "triple", "quad"])
+  printTurnSize?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10)
+  printFeed?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  printCut?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  printOpenDrawer?: boolean;
 }

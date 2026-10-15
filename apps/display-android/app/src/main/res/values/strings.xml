@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Turnero</string>
+    <string name="display_url">http://192.168.1.50:5175/</string>
+    <string name="screen_id">1</string>
+</resources>
