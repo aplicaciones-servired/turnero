@@ -573,12 +573,35 @@ function cargarConfig() {
 //
 function voz(text, volumen) {
     //
-    var u = new SpeechSynthesisUtterance();
+    // 1) TTS nativo: dentro del APK MainActivity expone window.AndroidTTS.
+    //    Android TV no trae voces para el Web Speech API.
+    if (window.AndroidTTS && text) {
+        //
+        try {
+            //
+            window.AndroidTTS.speak('v' + Date.now() + '-' + Math.random(), text, 0.9, 1);
+            return;
+        } catch (e) {
+            // Si el puente falla, se intenta con speechSynthesis.
+        }
+    }
     //
-    u.text = text;
-    u.lang = 'es-ES';
-    u.volume = volumen;
-    speechSynthesis.speak(u);
+    // 2) Web Speech API (navegadores de escritorio). Nunca debe romper la app:
+    //    si no existe, la pantalla sigue sin voz pero carga la informacion.
+    try {
+        //
+        if (typeof speechSynthesis === 'undefined' || typeof SpeechSynthesisUtterance === 'undefined') {
+            return;
+        }
+        //
+        var u = new SpeechSynthesisUtterance();
+        u.text = text;
+        u.lang = 'es-ES';
+        u.volume = volumen;
+        speechSynthesis.speak(u);
+    } catch (e) {
+        console.warn("voz no disponible", e);
+    }
 }
 
 //
