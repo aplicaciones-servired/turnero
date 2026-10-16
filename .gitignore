@@ -40,3 +40,4 @@ tools
 
 # La documentacion de despliegue si se versiona (a pesar de la regla README.md)
 !deploy/README.md
+POS-80-Series.rar
