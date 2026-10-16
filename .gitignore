@@ -40,4 +40,8 @@ tools
 
 # La documentacion de despliegue si se versiona (a pesar de la regla README.md)
 !deploy/README.md
+
+# Agente de impresion local: token y log no van a git
+deploy/print-agent/agent.json
+deploy/print-agent/print-agent.log
 POS-80-Series.rar

@@ -1,0 +1,8 @@
+{
+  "mode": "poll",
+  "api": "https://turnero.serviredgane.cloud/api",
+  "token": "COPIA_EL_MISMO_TOKEN_DE_PRINTER_AGENT_TOKEN",
+  "interval": 1000,
+  "printer": "",
+  "port": 9100
+}

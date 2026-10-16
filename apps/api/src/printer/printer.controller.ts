@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Post,
+  UnauthorizedException,
+  UseGuards,
+} from "@nestjs/common";
 import type { ServiceDTO, SettingsDTO, TurnDTO } from "@turnero/shared";
 import { JwtAuthGuard } from "../auth/jwt-auth.guard";
 import { RolesGuard } from "../auth/roles.guard";
@@ -53,6 +61,39 @@ export class PrinterController {
   @Get()
   async info() {
     return this.printer.getInfo();
+  }
+
+  // ── Cola para el agente remoto ──
+  // No usa JWT de usuario: el agente no tiene sesion, autentica con
+  // PRINTER_AGENT_TOKEN en la cabecera Authorization: Bearer <token>.
+
+  @Get("queue")
+  queue(@Headers("authorization") auth?: string) {
+    this.assertAgent(auth);
+    return { jobs: this.printer.listQueue() };
+  }
+
+  @Post("queue/ack")
+  ack(
+    @Headers("authorization") auth: string | undefined,
+    @Body() body: { id?: number | string }
+  ) {
+    this.assertAgent(auth);
+    return { ok: this.printer.ack(Number(body?.id)) };
+  }
+
+  /** Verifica el token compartido del agente. */
+  private assertAgent(auth?: string): void {
+    const esperado = this.printer.getAgentToken();
+    if (!esperado) {
+      throw new UnauthorizedException(
+        "Agente de impresion no habilitado (defina PRINTER_AGENT_TOKEN)."
+      );
+    }
+    const recibido = (auth ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (recibido !== esperado) {
+      throw new UnauthorizedException("Token de agente invalido.");
+    }
   }
 
   @UseGuards(JwtAuthGuard, RolesGuard)

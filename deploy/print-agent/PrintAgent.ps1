@@ -26,6 +26,10 @@ param(
     [string]$Printer = "",
     [int]$Port = 9100,
     [string]$LogFile = "",
+    [string]$Mode = "",
+    [string]$Api = "",
+    [string]$Token = "",
+    [int]$Interval = 1000,
     [switch]$Install
 )
 
@@ -38,6 +42,25 @@ function Write-Log {
     Write-Host $linea
     try { Add-Content -LiteralPath $LogFile -Value $linea -Encoding UTF8 } catch { }
 }
+
+# ------------------------------------------------------------- configuracion
+# Si existe agent.json al lado del script se usa para mode/api/token/printer/port.
+$configFile = Join-Path $PSScriptRoot 'agent.json'
+if (Test-Path $configFile) {
+    try {
+        $cfg = Get-Content -LiteralPath $configFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        if (-not $Mode) { $Mode = [string]$cfg.mode }
+        if (-not $Api) { $Api = [string]$cfg.api }
+        if (-not $Token) { $Token = [string]$cfg.token }
+        if ($cfg.printer -and -not $Printer) { $Printer = [string]$cfg.printer }
+        if ($cfg.port) { $Port = [int]$cfg.port }
+        Write-Log "Configuracion leida de agent.json"
+    } catch {
+        Write-Log "No se pudo leer agent.json: $($_.Exception.Message)"
+    }
+}
+if (-not $Mode) { $Mode = 'tcp' }
+$Mode = $Mode.ToLower()
 
 # ---------------------------------------------------------------- windowspool
 $RawPrinterCode = @'
@@ -176,6 +199,57 @@ if (-not $nombreImpresora) {
     exit 1
 }
 
+# ------------------------------------------------- modo poll (por defecto)
+# El agente SALE hacia el API y recoje los tickets pendientes. No necesita
+# puerto abierto ni que el servidor pueda alcanzar esta PC.
+if ($Mode -eq 'poll') {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    if (-not $Token) {
+        Write-Log "ERROR: el modo poll necesita un token (agent.json -> 'token' o -Token)."
+        exit 1
+    }
+    if (-not $Api) { $Api = 'https://turnero.serviredgane.cloud/api' }
+    $apiBase = $Api.TrimEnd('/')
+    $cabeceras = @{ Authorization = "Bearer $Token" }
+
+    Write-Log "Agente listo (MODO POLL). Impresora '$nombreImpresora'"
+    Write-Log "API: $apiBase/printer/queue  (cada $Interval ms)"
+    Write-Log "El API debe tener PRINTER_INTERFACE=queue y PRINTER_AGENT_TOKEN=<token>."
+
+    while ($true) {
+        try {
+            $respuesta = Invoke-RestMethod -Uri "$apiBase/printer/queue" -Headers $cabeceras -TimeoutSec 15
+            foreach ($trabajo in @($respuesta.jobs)) {
+                if (-not $trabajo.b64) { continue }
+                $bytes = [Convert]::FromBase64String([string]$trabajo.b64)
+                $ok = $false
+                try {
+                    $ok = [TurneroRawPrinter]::SendBytesToPrinter($nombreImpresora, $bytes)
+                } catch {
+                    Write-Log "Excepcion imprimiendo $($trabajo.code): $($_.Exception.Message)"
+                }
+                if ($ok) {
+                    try {
+                        Invoke-RestMethod -Method Post -Uri "$apiBase/printer/queue/ack" -Headers $cabeceras `
+                            -ContentType 'application/json' -Body (@{ id = $trabajo.id } | ConvertTo-Json) `
+                            -TimeoutSec 15 | Out-Null
+                    } catch {
+                        Write-Log "No se pudo confirmar $($trabajo.code): $($_.Exception.Message)"
+                    }
+                    Write-Log ("Ticket {0} ({1}) impreso [{2} bytes]" -f $trabajo.code, $trabajo.serviceName, $bytes.Length)
+                } else {
+                    Write-Log ("Ticket {0}: fallo al imprimir, se reintenta en el siguiente ciclo." -f $trabajo.code)
+                }
+            }
+        } catch {
+            # Sin red o API caida: no llenamos el log. Se reintenta solo.
+        }
+        Start-Sleep -Milliseconds $Interval
+    }
+}
+
+# ------------------------------------------------- modo tcp (servidor -> PC)
 $listener = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Any, $Port)
 $listener.Start()
 

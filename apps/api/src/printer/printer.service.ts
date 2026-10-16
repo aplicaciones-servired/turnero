@@ -34,6 +34,18 @@ export class PrinterService {
   /** Carpeta donde viven los logos imprimibles (public/media/imagenes). */
   private readonly logosDir: string;
 
+  /**
+   * Modo cola: el API no imprime, deja el ticket listo (ESC/POS en base64) para que
+   * un agente que corre en la PC con la impresora lo recoja y lo imprima.
+   * Se activa con PRINTER_INTERFACE=queue y evita que el servidor tenga que poder
+   * conectar hacia la impresora (red corporativa que bloquea eso).
+   */
+  private readonly queueMode: boolean;
+  /** Token compartido con el agente (PRINTER_AGENT_TOKEN). Sin el, la cola no se expone. */
+  private readonly agentToken: string | null;
+  private queue: Array<{ id: number; code: string; serviceName: string; b64: string }> = [];
+  private queueSeq = 0;
+
   /** Worker PowerShell persistente para impresion RAW (evita recompilar/arrancar por ticket). */
   private worker: ChildProcess | null = null;
   private workerBuf = "";
@@ -47,8 +59,14 @@ export class PrinterService {
     const rawIface = (config.get<string>("PRINTER_INTERFACE") ?? "").trim();
     const lower = rawIface.toLowerCase();
     const explicitWin = lower.startsWith("win:") && lower !== "win:auto";
+    this.queueMode = lower === "queue" || lower.startsWith("queue://");
+    this.agentToken =
+      (config.get<string>("PRINTER_AGENT_TOKEN") ?? "").trim() || null;
 
-    if (lower === "none" || lower === "simulado" || lower === "off") {
+    if (this.queueMode) {
+      this.winName = null;
+      this.iface = "";
+    } else if (lower === "none" || lower === "simulado" || lower === "off") {
       this.winName = null;
       this.iface = "";
     } else if (explicitWin) {
@@ -90,7 +108,13 @@ export class PrinterService {
     this.envOpenDrawer = (config.get<string>("PRINTER_OPEN_DRAWER") ?? "false") === "true";
 
     this.logger.log(
-      `Printer: ${this.winName ? `winspool -> ${this.winName}` : this.iface || "SIMULADO"} | ` +
+      `Printer: ${
+        this.queueMode
+          ? "COLA (lo imprime el agente remoto)"
+          : this.winName
+            ? `winspool -> ${this.winName}`
+            : this.iface || "SIMULADO"
+      } | ` +
         `charset=${this.charset} width=${this.defaultWidth}` +
         (this.envLogoPath ? ` logo=${this.envLogoPath}` : "")
     );
@@ -188,6 +212,21 @@ export class PrinterService {
     service: ServiceDTO,
     settings: SettingsDTO
   ): Promise<{ printed: boolean }> {
+    // ── Modo cola: se arma el ticket pero quien lo imprime es el agente remoto ──
+    if (this.queueMode) {
+      try {
+        const cola = this.build(settings.printWidth);
+        await this.fillTicket(cola, turn, service, settings);
+        this.enqueue(turn, service, cola.getBuffer());
+        return { printed: true };
+      } catch (err) {
+        this.logger.error(
+          `Error encolando ticket ${turn.code}: ${(err as Error).message}`
+        );
+        return { printed: false };
+      }
+    }
+
     if (!this.iface && !this.winName) {
       this.logger.log(`[SIMULADO] Ticket ${turn.code} (${service.name})`);
       return { printed: false };
@@ -231,6 +270,42 @@ export class PrinterService {
       this.logger.error(`Error imprimiendo ticket ${turn.code}: ${(err as Error).message}`);
       return { printed: false };
     }
+  }
+
+  // ── Cola de impresion (modo queue) ──
+
+  private enqueue(turn: TurnDTO, service: ServiceDTO, buffer: Buffer): void {
+    const job = {
+      id: ++this.queueSeq,
+      code: turn.code,
+      serviceName: service.name,
+      b64: buffer.toString("base64"),
+    };
+    this.queue.push(job);
+    // Si el agente esta caido, no acumulamos para siempre.
+    if (this.queue.length > 200) this.queue.shift();
+    this.logger.log(
+      `Ticket ${turn.code} encolado para el agente remoto (id ${job.id}).`
+    );
+  }
+
+  /** Tickets pendientes que el agente debe imprimir. */
+  listQueue(): Array<{ id: number; code: string; serviceName: string; b64: string }> {
+    return this.queue.slice();
+  }
+
+  /** El agente confirma que ya imprimio el ticket; lo saca de la cola. */
+  ack(id: number): boolean {
+    const i = this.queue.findIndex((j) => j.id === id);
+    if (i < 0) return false;
+    const [job] = this.queue.splice(i, 1);
+    this.logger.log(`Ticket ${job.code} (id ${id}) confirmado por el agente.`);
+    return true;
+  }
+
+  /** Token que el agente debe enviar en la cabecera Authorization. */
+  getAgentToken(): string | null {
+    return this.agentToken;
   }
 
   /** Construye el contenido del ticket (similar al legacy Impresionwin.php). */
@@ -317,7 +392,10 @@ export class PrinterService {
     openDrawer: boolean;
   }> {
     let connected = false;
-    if (this.winName) {
+    if (this.queueMode) {
+      // El agente se encarga; el API solo mantiene la cola.
+      connected = true;
+    } else if (this.winName) {
       // Windows: la impresora se detecto al arrancar; winspool no permite sondear sin imprimir.
       connected = true;
     } else if (this.iface) {
@@ -331,9 +409,19 @@ export class PrinterService {
     return {
       connected,
       printerName: this.winName,
-      interface: this.winName ? `win:${this.winName}` : this.iface || "simulado",
+      interface: this.winName
+        ? `win:${this.winName}`
+        : this.queueMode
+          ? "queue (agente remoto)"
+          : this.iface || "simulado",
       width: this.defaultWidth,
-      mode: this.winName ? "winspool" : this.iface ? "interface" : "simulado",
+      mode: this.winName
+        ? "winspool"
+        : this.queueMode
+          ? "queue"
+          : this.iface
+            ? "interface"
+            : "simulado",
       logos: this.listLogos(),
       qrTemplate: this.envQrTemplate ?? "",
       openDrawer: this.envOpenDrawer,
