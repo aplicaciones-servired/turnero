@@ -50,7 +50,9 @@ services:
       api:
         condition: service_started
     ports:
-      - "8080:80"
+      # Puerto del host -> 80 interno de nginx. Ajusta en deploy/.env si esta ocupado.
+      # (80 = Nginx Proxy Manager, 8080 = Jenkins)
+      - "${WEB_HOST_PORT:-8090}:80"
     networks:
       - red-gane-int
     healthcheck:
