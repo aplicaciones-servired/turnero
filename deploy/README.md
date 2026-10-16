@@ -63,7 +63,9 @@ Internet
 | `CORS_ORIGINS` | `https://turnero.serviredgane.cloud`. |
 | `SEDE_ID` / `EMP_ID` | Sede y empresa de MagisoftV1. |
 | `ESTADO_ESPERA` / `ESTADO_LLAMANDO` / `ESTADO_TERMINADO` / `ESTADO_CANCELADO` | Estados de turno. |
-| `PRINTER_*` | Impresora térmica (`PRINTER_INTERFACE=/dev/usb/lp0`, `PRINTER_TYPE=epson`, `PRINTER_WIDTH=48`, `PRINTER_CHARACTER_SET=PC850_MULTILINGUAL`). |
+| `PRINTER_INTERFACE` | Cómo imprimir: `queue` (agente remoto, **recomendado**), `tcp://IP:9100`, `win:Nombre`, `/dev/usb/lp0`, o vacío (`auto`). |
+| `PRINTER_AGENT_TOKEN` | Token compartido con el agente de impresión. **Obligatorio** cuando `PRINTER_INTERFACE=queue`. |
+| `PRINTER_TYPE` / `PRINTER_WIDTH` / `PRINTER_CHARACTER_SET` | Tipo de comandos (`epson`), ancho de papel (`48`) y juego de caracteres (`PC850_MULTILINGUAL`). |
 | `DISPLAY_SCREEN` | Número de pantalla del visualizador (`1` por defecto). |
 
 > **Importante:** la contraseña de la base de datos debe ser la real (en una plantilla
@@ -116,9 +118,57 @@ sudo docker compose -f deploy/docker-compose.yml up -d --force-recreate
 
 ## Impresión de tickets
 
-El API imprime con la impresora térmica conectada **por USB** al servidor. Para que el
-contenedor la vea, hay que exponer el dispositivo en el servicio `api` de
-`docker-compose.yml`:
+El API no imprime por sí mismo: genera el ticket en ESC/POS y lo envía por una de estas vías.
+
+### Modo cola (recomendado)
+
+Útil cuando la impresora está en **otro PC** y la red **no permite** que el servidor la
+alcance (habitual en redes corporativas). El servidor **encola** el ticket y un pequeño
+agente instalado en el PC de la impresora **sale** a buscarlo por HTTPS.
+
+```
+Navegador → API (VPS) ──encola──► GET /api/printer/queue ◄──agente (PC impresora) ──► impresora USB
+```
+
+Configuración en el `.env` de producción (credential de Jenkins):
+
+```env
+PRINTER_INTERFACE=queue
+PRINTER_AGENT_TOKEN=<cadena-larga-aleatoria>
+```
+
+Luego, en el **PC que tiene la impresora USB**:
+
+1. Copia `deploy/print-agent/` (el `PrintAgent.ps1` y un `agent.json`).
+2. Crea `agent.json` junto al script (cópialo de `agent.example.json`):
+
+   ```json
+   {
+     "mode": "poll",
+     "api": "https://turnero.serviredgane.cloud/api",
+     "token": "<el-mismo-PRINTER_AGENT_TOKEN>",
+     "interval": 1000
+   }
+   ```
+
+3. Abre **PowerShell como administrador** y ejecuta una vez (crea regla de firewall +
+   tarea programada que arranca al iniciar sesión):
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\PrintAgent.ps1 -Install
+   ```
+
+4. Comprueba el log (`print-agent.log`): debe decir
+   `Agente listo (MODO POLL). Impresora '...'` y `Ticket A-001 (...) impreso [N bytes]`
+   por cada turno.
+
+> El agente **no necesita** puerto abierto ni que el servidor lo alcance: solo conexión
+> saliente a `https://turnero.serviredgane.cloud`.
+
+### Impresora USB conectada al propio servidor
+
+Alternativa si la impresora está enchufada al servidor. El dispositivo hay que exponerlo en
+el servicio `api` de `docker-compose.yml`:
 
 ```yaml
   api:
@@ -126,8 +176,14 @@ contenedor la vea, hay que exponer el dispositivo en el servicio `api` de
       - "/dev/usb/lp0:/dev/usb/lp0"
 ```
 
-Si el servidor no tiene una impresora en `/dev/usb/lp0`, **no añadas** esa línea (deja el
-bloque comentado) o el `up` fallará.
+y usar `PRINTER_INTERFACE=/dev/usb/lp0`. Si el servidor **no** tiene esa impresora,
+**no añadas** la línea (o el `up` fallará).
+
+### Agente como servidor TCP (modo antiguo)
+
+`-Mode tcp` (por defecto) deja al agente escuchando en `9100` y requiere abrir ese puerto
+al servidor (`PRINTER_INTERFACE=tcp://IP:9100`). Solo funciona si la red permite
+servidor → PC, por eso **no** se usa en la red actual.
 
 ## APK de la pantalla
 
