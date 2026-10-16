@@ -26,11 +26,13 @@ COPY apps/display apps/display
 # URL relativa al mismo origen: nginx hace de proxy hacia el API.
 ARG VITE_API_URL=/api
 ARG VITE_MEDIA_URL=/media
+ARG VITE_SCREEN=1
 ARG CASHIER_BASE=/caja/
 ARG DISPLAY_BASE=/pantalla/
 
 ENV VITE_API_URL=$VITE_API_URL \
-    VITE_MEDIA_URL=$VITE_MEDIA_URL
+    VITE_MEDIA_URL=$VITE_MEDIA_URL \
+    VITE_SCREEN=$VITE_SCREEN
 
 RUN npm run build --workspace @turnero/kiosk \
  && VITE_BASE=$CASHIER_BASE npm run build --workspace @turnero/cashier \

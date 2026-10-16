@@ -29,9 +29,7 @@ pipeline {
                 sh 'docker version'
                 sh 'docker compose version'
                 withCredentials([file(credentialsId: 'turnero-prod-env', variable: 'DEPLOY_ENV_CREDENTIAL')]) {
-                    sh '''
-                        install -m 600 "${DEPLOY_ENV_CREDENTIAL}" "${ENV_FILE}"
-                    '''
+                    sh 'sh deploy/prepare-env.sh "${DEPLOY_ENV_CREDENTIAL}" "${ENV_FILE}"'
                 }
             }
         }
@@ -53,9 +51,10 @@ pipeline {
                 // El servicio `web` no publica puertos en el host: comprobamos el
                 // health del API a traves de nginx, desde dentro de la red
                 // `red-gane-int` (busybox wget viene en nginx:alpine).
+                // 127.0.0.1 (no `localhost`: nginx solo escucha en IPv4).
                 sh '''
                     for i in $(seq 1 40); do
-                      if docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} exec -T web wget -qO- http://localhost/api/health; then
+                      if docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} exec -T web wget -qO- http://127.0.0.1/api/health; then
                         echo ""
                         echo "API OK a traves de nginx"
                         exit 0
