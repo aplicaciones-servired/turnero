@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { useAuth } from "../auth";
+import { API_URL } from "../api";
 
 export function Login() {
   const login = useAuth((s) => s.login);
@@ -20,7 +21,7 @@ export function Login() {
       if (status === 429) setError("Demasiados intentos. Espera 1 minuto e intenta de nuevo.");
       else if (status === 401) setError("Usuario o contrasena incorrectos.");
       else if (status) setError(`Error ${status}: ${e.response?.data?.message ?? ""}`);
-      else setError("No se pudo conectar con el API (revisa que este en http://localhost:3001).");
+      else setError(`No se pudo conectar con el API (${API_URL}).`);
     } finally {
       setLoading(false);
     }
