@@ -14,6 +14,7 @@ import { PrinterModule } from "./printer/printer.module";
 import { ApkModule } from "./apk/apk.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { VisualizerModule } from "./visualizer/visualizer.module";
+import { ModulosModule } from "./modulos/modulos.module";
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { VisualizerModule } from "./visualizer/visualizer.module";
     TurnsModule,
     VisualizerModule,
     SettingsModule,
+    ModulosModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

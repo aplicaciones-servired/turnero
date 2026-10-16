@@ -8,6 +8,7 @@ import type { AuthUser } from "@turnero/shared";
 export interface JwtPayload {
   sub: string;
   role: string;
+  counterName?: string | null;
 }
 
 @Injectable()
@@ -33,6 +34,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (!user) {
       throw new UnauthorizedException("Usuario invalido");
     }
-    return user;
+    // La caja/modulo elegida al ingresar viaja en el token.
+    return { ...user, counterName: payload.counterName ?? user.counterName };
   }
 }

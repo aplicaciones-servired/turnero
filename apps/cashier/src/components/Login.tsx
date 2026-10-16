@@ -1,20 +1,29 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useAuth } from "../auth";
-import { API_URL } from "../api";
+import { api, API_URL, CAJA_KEY } from "../api";
 
 export function Login() {
   const login = useAuth((s) => s.login);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [caja, setCaja] = useState(() => localStorage.getItem(CAJA_KEY) ?? "");
+  const [modulos, setModulos] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    api
+      .get<string[]>("/modulos")
+      .then((res) => setModulos(res.data))
+      .catch(() => setModulos([]));
+  }, []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      await login(username.trim(), password);
+      await login(username.trim(), password, caja.trim() || undefined);
     } catch (err) {
       const e = err as { response?: { status?: number; data?: { message?: string } }; message?: string };
       const status = e.response?.status;
@@ -51,6 +60,23 @@ export function Login() {
           onChange={(e) => setPassword(e.target.value)}
           className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
         />
+
+        <label className="mt-4 block text-sm font-medium text-slate-600">Caja / Módulo</label>
+        <input
+          value={caja}
+          onChange={(e) => setCaja(e.target.value)}
+          list="modulos-lista"
+          placeholder="Ej: 3"
+          className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:border-blue-500"
+        />
+        <datalist id="modulos-lista">
+          {modulos.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+        <p className="mt-1 text-xs text-slate-400">
+          Es el número que se anunciará en la pantalla al llamar al cliente.
+        </p>
 
         {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
 

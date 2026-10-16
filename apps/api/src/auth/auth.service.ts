@@ -15,7 +15,13 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException("Credenciales invalidas");
     }
-    const token = await this.jwt.signAsync({ sub: user.id, role: user.role });
-    return { token, user };
+    // La caja/modulo elegido al ingresar se anuncia en pantalla en cada llamado.
+    const counterName = dto.caja?.trim() || user.counterName || null;
+    const token = await this.jwt.signAsync({
+      sub: user.id,
+      role: user.role,
+      counterName,
+    });
+    return { token, user: { ...user, counterName } };
   }
 }
