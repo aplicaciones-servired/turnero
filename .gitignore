@@ -37,3 +37,6 @@ turnero-master.zip
 opencode
 .env.deploy.example
 tools
+
+# La documentacion de despliegue si se versiona (a pesar de la regla README.md)
+!deploy/README.md
