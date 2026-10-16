@@ -171,7 +171,9 @@ export function AdminSettings() {
       setTestMsg(
         res.data.printed
           ? "Ticket de prueba enviado a la impresora."
-          : "No se imprimio (sin impresora conectada / modo simulado)."
+          : printerInfo && !printerInfo.connected
+            ? `No hay respuesta de la impresora (${printerInfo.printerName ?? printerInfo.interface}). Revisa el log del API y la conectividad.`
+            : "No se imprimio: no hay impresora configurada (modo simulado)."
       );
     } catch (error) {
       setTestMsg(

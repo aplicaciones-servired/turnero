@@ -51,7 +51,7 @@ export class PrinterController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles("admin")
   @Get()
-  info() {
+  async info() {
     return this.printer.getInfo();
   }
 

@@ -302,8 +302,11 @@ export class PrinterService {
     }
   }
 
-  /** Informacion de la impresora para el panel de admin. */
-  getInfo(): {
+  /** Informacion de la impresora para el panel de admin.
+   *  `connected` es una comprobacion REAL (no solo que exista la configuracion):
+   *  para tcp:// abre y cierra un socket, para /dev/... revisa que el fichero exista.
+   */
+  async getInfo(): Promise<{
     connected: boolean;
     printerName: string | null;
     interface: string;
@@ -312,9 +315,21 @@ export class PrinterService {
     logos: string[];
     qrTemplate: string;
     openDrawer: boolean;
-  } {
+  }> {
+    let connected = false;
+    if (this.winName) {
+      // Windows: la impresora se detecto al arrancar; winspool no permite sondear sin imprimir.
+      connected = true;
+    } else if (this.iface) {
+      try {
+        connected = await this.build().isPrinterConnected();
+      } catch {
+        connected = false;
+      }
+    }
+
     return {
-      connected: Boolean(this.winName || this.iface),
+      connected,
       printerName: this.winName,
       interface: this.winName ? `win:${this.winName}` : this.iface || "simulado",
       width: this.defaultWidth,
