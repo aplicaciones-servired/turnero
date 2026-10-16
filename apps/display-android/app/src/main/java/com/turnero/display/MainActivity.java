@@ -3,21 +3,28 @@ package com.turnero.display;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+
+import java.util.Locale;
 
 public class MainActivity extends Activity {
 
@@ -33,6 +40,9 @@ public class MainActivity extends Activity {
     private String targetUrl;
     private boolean paginaOk = false;
     private boolean cargaFallida = false;
+
+    private TextToSpeech tts;
+    private boolean ttsListo = false;
 
     private final Runnable arrancar = new Runnable() {
         @Override public void run() { cargar(); }
@@ -74,6 +84,10 @@ public class MainActivity extends Activity {
         }
         s.setBlockNetworkLoads(false);
 
+        // Puente: la pagina usa el TTS nativo de Android en vez del Web Speech
+        // API, que Android TV no trae. Esto ademas no requiere un toque previo.
+        webView.addJavascriptInterface(new PuenteAndroid(), "AndroidTTS");
+
         webView.setWebChromeClient(new WebChromeClient());
         webView.setWebViewClient(new WebViewClient() {
 
@@ -102,6 +116,7 @@ public class MainActivity extends Activity {
             }
         });
 
+        iniciarTts();
         hideSystemUi();
 
         targetUrl = construirUrl();
@@ -113,7 +128,6 @@ public class MainActivity extends Activity {
                             + "</body></html>",
                     "text/html", "utf-8", null);
         } else {
-            // Espera un momento a que la red este disponible y arranca.
             if (hayRed()) {
                 handler.postDelayed(arrancar, ARRANQUE_MS);
             } else {
@@ -122,6 +136,104 @@ public class MainActivity extends Activity {
             handler.postDelayed(vigilante, VIGILANCIA_MS);
         }
     }
+
+    // ------------------------------------------------------------------ TTS
+
+    private void iniciarTts() {
+        tts = new TextToSpeech(getApplicationContext(), new TextToSpeech.OnInitListener() {
+            @Override
+            public void onInit(int estado) {
+                if (estado == TextToSpeech.SUCCESS) {
+                    Locale locale = new Locale("es", "CO");
+                    int resultado = tts.setLanguage(locale);
+                    if (resultado == TextToSpeech.LANG_MISSING_DATA
+                            || resultado == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        tts.setLanguage(Locale.getDefault());
+                    }
+                    tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                        @Override public void onStart(String id) { }
+
+                        @Override public void onDone(String id) { avisar(id); }
+
+                        @Override public void onError(String id) { avisar(id); }
+
+                        @Override public void onError(String id, int codigo) { avisar(id); }
+                    });
+                    ttsListo = true;
+                } else {
+                    // Sin motor de voz instalado: la pagina sigue funcionando,
+                    // pero no habla.
+                    ttsListo = false;
+                }
+            }
+        });
+    }
+
+    /** Devuelve el control a la pagina cuando termino de hablar. */
+    private void avisar(final String id) {
+        final WebView wv = webView;
+        if (wv == null || id == null) return;
+        final String js = "window.__turneroTtsDone && window.__turneroTtsDone('" + id + "');";
+        handler.post(new Runnable() {
+            @Override public void run() {
+                try { wv.evaluateJavascript(js, null); } catch (Exception ignored) { }
+            }
+        });
+    }
+
+    /** Puente expuesto a JavaScript como window.AndroidTTS. */
+    public class PuenteAndroid {
+
+        /** true si hay motor de voz instalado y listo. */
+        @JavascriptInterface
+        public boolean disponible() {
+            return ttsListo;
+        }
+
+        /** id = correlacion con la promesa de JS. rate/pitch en escala 0..2. */
+        @JavascriptInterface
+        public void speak(final String id, final String texto, final double rate, final double pitch) {
+            final String t = texto == null ? "" : texto;
+            handler.post(new Runnable() {
+                @Override public void run() {
+                    if (tts == null || !ttsListo || t.isEmpty()) {
+                        avisar(id);
+                        return;
+                    }
+                    tts.setSpeechRate((float) Math.max(0.1, Math.min(2.0, rate)));
+                    tts.setPitch((float) Math.max(0.1, Math.min(2.0, pitch)));
+                    tts.speak(t, TextToSpeech.QUEUE_FLUSH, null, id);
+                }
+            });
+        }
+
+        /** Dos notas ascendentes: el aviso suave previo a la voz. */
+        @JavascriptInterface
+        public void chime() {
+            handler.post(new Runnable() {
+                @Override public void run() {
+                    try {
+                        ToneGenerator tono = new ToneGenerator(AudioManager.STREAM_MUSIC, 70);
+                        tono.startTone(ToneGenerator.TONE_PROP_BEEP2, 120);
+                        handler.postDelayed(new Runnable() {
+                            @Override public void run() {
+                                try { tono.startTone(ToneGenerator.TONE_PROP_BEEP, 160); }
+                                catch (Exception ignored) { }
+                            }
+                        }, 200);
+                        handler.postDelayed(new Runnable() {
+                            @Override public void run() {
+                                try { tono.release(); } catch (Exception ignored) { }
+                            }
+                        }, 900);
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
+        }
+    }
+
+    // ----------------------------------------------------------------- Web
 
     /** Arma la URL final, agregando el id de pantalla si no viene en la URL. */
     private String construirUrl() {
@@ -137,7 +249,6 @@ public class MainActivity extends Activity {
         return url;
     }
 
-    /** Intenta cargar; si no hay red, reintenta en REINTENTO_MS. */
     private void cargar() {
         if (webView == null || targetUrl == null) {
             return;
@@ -214,6 +325,10 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         if (handler != null) {
             handler.removeCallbacksAndMessages(null);
+        }
+        if (tts != null) {
+            try { tts.shutdown(); } catch (Exception ignored) { }
+            tts = null;
         }
         if (webView != null) {
             webView.destroy();

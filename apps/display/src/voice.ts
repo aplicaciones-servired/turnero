@@ -1,11 +1,27 @@
 import { VOICE_MODE } from "./api";
 
+/** true cuando el APK inyectó el TTS nativo de Android (window.AndroidTTS). */
+export function hasNativeTts(): boolean {
+  return typeof window !== "undefined" && !!window.AndroidTTS;
+}
+
 /** Reproduce un tono suave de aviso (dos notas ascendentes, volumen bajo). */
 export function playChime(): Promise<void> {
+  // En el APK el aviso lo hace Android: no necesita un toque previo.
+  if (hasNativeTts()) {
+    try {
+      window.AndroidTTS!.chime();
+    } catch {
+      // sin audio, no es crítico
+    }
+    return new Promise((resolve) => setTimeout(resolve, 700));
+  }
   return new Promise((resolve) => {
     try {
       const Ctx = window.AudioContext || (window as never as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       const ctx = new Ctx();
+      // Android bloquea el AudioContext hasta que hay un gesto del usuario.
+      if (ctx.state === "suspended") void ctx.resume();
       const now = ctx.currentTime;
       const notes = [660, 880];
       notes.forEach((freq, i) => {
@@ -77,6 +93,24 @@ export class Voice {
   }
 
   private speakTts(text: string, opts: SpeakOptions): Promise<void> {
+    // Android TV no trae speechSynthesis: en el APK se usa el TTS nativo.
+    if (hasNativeTts()) {
+      return new Promise((resolve) => {
+        const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        window.__turneroTtsDone = (doneId: string) => {
+          if (doneId === id) {
+            window.__turneroTtsDone = undefined;
+            resolve();
+          }
+        };
+        try {
+          window.AndroidTTS!.speak(id, text, opts.rate ?? 0.85, opts.pitch ?? 1);
+        } catch {
+          window.__turneroTtsDone = undefined;
+          resolve();
+        }
+      });
+    }
     return new Promise((resolve) => {
       if (!("speechSynthesis" in window)) return resolve();
       const utter = new SpeechSynthesisUtterance(text);

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
 import type { CallTurnPayload, SettingsDTO, SnapshotDTO, TurnDTO } from "@turnero/shared";
 import { api, SOCKET_URL } from "./api";
-import { voice } from "./voice";
+import { hasNativeTts, voice } from "./voice";
 
 const emptySnapshot: SnapshotDTO = { nowServing: [], waiting: [] };
 
@@ -10,7 +10,9 @@ export default function App() {
   const [snapshot, setSnapshot] = useState<SnapshotDTO>(emptySnapshot);
   const [latest, setLatest] = useState<TurnDTO | null>(null);
   const [settings, setSettings] = useState<SettingsDTO | null>(null);
-  const [audioEnabled, setAudioEnabled] = useState(false);
+  // En el APK (window.AndroidTTS) el sonido no necesita un toque de usuario,
+  // así que no se muestra la pantalla de activación.
+  const [audioEnabled, setAudioEnabled] = useState(() => hasNativeTts());
   const [clock, setClock] = useState(new Date());
   const socketRef = useRef<Socket | null>(null);
   const settingsRef = useRef<SettingsDTO | null>(null);
@@ -23,6 +25,10 @@ export default function App() {
     const timer = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (audioEnabled) voice.prepare();
+  }, [audioEnabled]);
 
   useEffect(() => {
     api.get<SettingsDTO>("/settings").then((r) => setSettings(r.data));
