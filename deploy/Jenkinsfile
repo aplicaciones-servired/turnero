@@ -50,21 +50,19 @@ pipeline {
 
         stage('Verificar') {
             steps {
-                // Espera a que el API responda a traves de nginx.
-                // El puerto del host viene de deploy/.env (WEB_HOST_PORT); por defecto 8090.
+                // El servicio `web` no publica puertos en el host: comprobamos el
+                // health del API a traves de nginx, desde dentro de la red
+                // `red-gane-int` (busybox wget viene en nginx:alpine).
                 sh '''
-                    PORT=$(awk -F= '/^[[:space:]]*WEB_HOST_PORT=/{v=$2} END{print v}' "${ENV_FILE}" | tr -cd '0-9')
-                    PORT=${PORT:-8090}
-                    URL="http://127.0.0.1:${PORT}"
-                    echo "Comprobando ${URL}/api/health"
                     for i in $(seq 1 40); do
-                      if curl -fsS "${URL}/api/health" > /dev/null; then
-                        echo "API OK"; curl -s "${URL}/api/health"; echo
+                      if docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} exec -T web wget -qO- http://localhost/api/health; then
+                        echo ""
+                        echo "API OK a traves de nginx"
                         exit 0
                       fi
                       sleep 3
                     done
-                    echo "El API no respondio a tiempo (${URL})"
+                    echo "El API no respondio a tiempo"
                     docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} ps || true
                     docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs --tail=120 api || true
                     docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs --tail=60 web || true
