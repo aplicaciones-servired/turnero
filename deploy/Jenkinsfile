@@ -21,6 +21,8 @@ pipeline {
         COMPOSE_FILE = "deploy/docker-compose.yml"
         ENV_FILE     = "deploy/.env"
         DOMAIN       = "turnero.serviredgane.cloud"
+        // Puerto host del contenedor `web` (nginx interno siempre escucha en 80).
+        WEB_URL      = "http://127.0.0.1:8080"
     }
 
     stages {
@@ -53,14 +55,16 @@ pipeline {
                 // Espera a que el API responda a traves de nginx.
                 sh '''
                     for i in $(seq 1 40); do
-                      if curl -fsS http://127.0.0.1/api/health > /dev/null; then
-                        echo "API OK"; curl -s http://127.0.0.1/api/health; echo
+                      if curl -fsS "${WEB_URL}/api/health" > /dev/null; then
+                        echo "API OK"; curl -s "${WEB_URL}/api/health"; echo
                         exit 0
                       fi
                       sleep 3
                     done
-                    echo "El API no respondio a tiempo"
-                    docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs --tail=120 api
+                    echo "El API no respondio a tiempo (${WEB_URL})"
+                    docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} ps || true
+                    docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs --tail=120 api || true
+                    docker compose -f ${COMPOSE_FILE} --env-file ${ENV_FILE} logs --tail=60 web || true
                     exit 1
                 '''
             }
