@@ -17,7 +17,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private readonly users: UsersService
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      // Permite tambien ?token= para descargas nativas del navegador (ej. APK),
+      // donde no se pueden enviar cabeceras Authorization.
+      jwtFromRequest: ExtractJwt.fromExtractors([
+        ExtractJwt.fromAuthHeaderAsBearerToken(),
+        ExtractJwt.fromUrlQueryParameter("token"),
+      ]),
       ignoreExpiration: false,
       secretOrKey: config.get<string>("JWT_SECRET") ?? "dev_secret",
     });

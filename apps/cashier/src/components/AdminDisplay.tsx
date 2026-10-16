@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import axios from "axios";
-import { api } from "../api";
+import { api, API_URL, TOKEN_KEY } from "../api";
 
 type ApkState = "idle" | "building" | "ready" | "error";
 
@@ -18,7 +18,6 @@ type ApkStatus = {
 };
 
 export function AdminDisplay() {
-  const queryClient = useQueryClient();
   const { data, refetch, isFetching } = useQuery<ApkStatus>({
     queryKey: ["apk"],
     queryFn: async () => (await api.get<ApkStatus>("/apk")).data,
@@ -84,29 +83,25 @@ export function AdminDisplay() {
     }
   };
 
-  const download = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api.get<Blob>("/apk/download", { responseType: "blob" });
-      const blobUrl = URL.createObjectURL(res.data);
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = data?.fileName ?? "turnero.apk";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-      await queryClient.invalidateQueries({ queryKey: ["apk"] });
-    } catch (e) {
-      setError(
-        axios.isAxiosError<{ message?: string | string[] }>(e)
-          ? String(e.response?.data?.message ?? "No se pudo descargar el APK.")
-          : "No se pudo descargar el APK."
-      );
-    } finally {
-      setBusy(false);
+  const download = () => {
+    if (!data?.fileName) {
+      setError("Todavia no hay un APK generado. Pulsa \"Generar APK\" primero.");
+      return;
     }
+    setError(null);
+    // Descarga nativa del navegador: evita depender de axios/blobs y funciona
+    // al primer clic. El token viaja como parametro porque un enlace no puede
+    // enviar la cabecera Authorization.
+    const token = localStorage.getItem(TOKEN_KEY);
+    const base = API_URL.replace(/\/+$/, "");
+    const href = `${base}/apk/download${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+    const a = document.createElement("a");
+    a.href = href;
+    a.download = data.fileName;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
   };
 
   const state = data?.state ?? "idle";
@@ -169,7 +164,7 @@ export function AdminDisplay() {
           </button>
           <button
             onClick={download}
-            disabled={busy || state !== "ready"}
+            disabled={!data?.fileName}
             className="rounded-lg bg-emerald-600 px-5 py-2.5 font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
           >
             Descargar APK

@@ -80,16 +80,19 @@ export class ApkService implements OnModuleInit {
 
   status(): ApkStatus {
     const cfg = this.getConfig();
-    const ready = this.state === "ready" && existsSync(this.apkFile);
+    const exists = existsSync(this.apkFile);
+    // El estado vive en memoria y se pierde en cada reinicio del API, pero el APK
+    // sigue en disco: si hay archivo y aun no se construyo nada, ya esta listo.
+    const state: ApkState = this.state === "idle" && exists ? "ready" : this.state;
     return {
-      state: this.state,
-      message: this.message,
+      state,
+      message: this.message || (state === "ready" ? "APK listo para descargar." : ""),
       config: cfg,
       startedAt: this.startedAt,
       finishedAt: this.finishedAt,
-      sizeBytes: ready ? statSync(this.apkFile).size : null,
-      file: ready ? this.apkFile : null,
-      fileName: ready ? this.fileNameFor(cfg) : null,
+      sizeBytes: exists ? statSync(this.apkFile).size : null,
+      file: exists ? this.apkFile : null,
+      fileName: exists ? this.fileNameFor(cfg) : null,
       log: this.log.slice(-60),
     };
   }
