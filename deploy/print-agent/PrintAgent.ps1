@@ -19,7 +19,16 @@
      powershell -ExecutionPolicy Bypass -File PrintAgent.ps1 -Printer "POS-80-Series" -Port 9100
      powershell -ExecutionPolicy Bypass -File PrintAgent.ps1 -Install        (requiere admin)
 
-  ==============================================================================
+   Modos (-Mode / agent.json -> "mode"):
+     - tcp    (por defecto): escucha en un puerto TCP; el API imprime con
+                            PRINTER_INTERFACE=tcp://<IP-PC>:<puerto>.
+     - poll   : el agente SALE al API y recoje la cola; el API usa
+                PRINTER_INTERFACE=queue. No requiere puerto abierto.
+     - local  : el KIOSCO imprime en su propia impresora (como el turnero
+                master). El agente expone http://localhost:<puerto>/print y el
+                API usa PRINTER_INTERFACE=kiosk (devuelve el ticket en base64).
+
+   ==============================================================================
 #>
 [CmdletBinding()]
 param(
@@ -53,7 +62,7 @@ if (Test-Path $configFile) {
         if (-not $Api) { $Api = [string]$cfg.api }
         if (-not $Token) { $Token = [string]$cfg.token }
         if ($cfg.printer -and -not $Printer) { $Printer = [string]$cfg.printer }
-        if ($cfg.port) { $Port = [int]$cfg.port }
+        if ($cfg.port -and -not $PSBoundParameters.ContainsKey('Port')) { $Port = [int]$cfg.port }
         Write-Log "Configuracion leida de agent.json"
     } catch {
         Write-Log "No se pudo leer agent.json: $($_.Exception.Message)"
@@ -152,23 +161,30 @@ function Select-TerminalPrinter {
 if ($Install) {
     $proceso = 'powershell.exe'
     $argumentos = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $PSCommandPath + '"'
+    # Solo fijamos -Mode si se paso explicitamente; si no, se respeta agent.json.
+    $esLocal = $Mode -in @('local', 'http', 'kiosk')
+    if ($PSBoundParameters.ContainsKey('Mode')) { $argumentos += ' -Mode ' + $Mode }
     if ($Printer) { $argumentos += ' -Printer "' + $Printer + '"' }
     $argumentos += " -Port $Port"
 
-    $nombre = 'TurneroPrintAgent'
+    # Tarea distinta por modo para poder tener poll/tcp y local a la vez.
+    $nombre = if ($esLocal) { 'TurneroPrintAgentLocal' } else { 'TurneroPrintAgent' }
 
-    try {
-        $regla = Get-NetFirewallRule -DisplayName 'Turnero Print Agent' -ErrorAction SilentlyContinue
-        if (-not $regla) {
-            New-NetFirewallRule -DisplayName 'Turnero Print Agent' -Direction Inbound -Protocol TCP `
-                -LocalPort $Port -Action Allow -Profile Any | Out-Null
-            Write-Log "Regla de firewall creada (TCP $Port)."
-        } else {
-            Write-Log "Regla de firewall ya existente (TCP $Port)."
+    # El modo local escucha solo en localhost: no necesita regla de firewall.
+    if (-not $esLocal) {
+        try {
+            $regla = Get-NetFirewallRule -DisplayName 'Turnero Print Agent' -ErrorAction SilentlyContinue
+            if (-not $regla) {
+                New-NetFirewallRule -DisplayName 'Turnero Print Agent' -Direction Inbound -Protocol TCP `
+                    -LocalPort $Port -Action Allow -Profile Any | Out-Null
+                Write-Log "Regla de firewall creada (TCP $Port)."
+            } else {
+                Write-Log "Regla de firewall ya existente (TCP $Port)."
+            }
+        } catch {
+            Write-Log "No se pudo crear la regla de firewall: $($_.Exception.Message)"
+            Write-Log "Ejecuta PowerShell como administrador."
         }
-    } catch {
-        Write-Log "No se pudo crear la regla de firewall: $($_.Exception.Message)"
-        Write-Log "Ejecuta PowerShell como administrador."
     }
 
     $accion = New-ScheduledTaskAction -Execute $proceso -Argument $argumentos
@@ -247,6 +263,92 @@ if ($Mode -eq 'poll') {
         }
         Start-Sleep -Milliseconds $Interval
     }
+}
+
+# ------------------------------------------------- modo local (kiosco -> PC)
+# El KIOSCO (pagina web) envia el ticket a esta PC, que lo imprime por winspool.
+# Es el equivalente moderno del Impresion.php del turnero master: la impresora
+# va conectada a la misma PC del kiosco. Escucha en http://localhost:<puerto>/.
+if ($Mode -eq 'local' -or $Mode -eq 'http' -or $Mode -eq 'kiosk') {
+    $prefijo = "http://localhost:$Port/"
+    $listenerHttp = New-Object System.Net.HttpListener
+    $listenerHttp.Prefixes.Add($prefijo)
+
+    try {
+        $listenerHttp.Start()
+    } catch {
+        Write-Log "ERROR: no se pudo escuchar en $prefijo -> $($_.Exception.Message)"
+        Write-Log "Revisa que el puerto $Port este libre."
+        exit 1
+    }
+
+    Write-Log "Agente listo (MODO LOCAL). $prefijo -> impresora '$nombreImpresora'"
+    Write-Log "Configura el kiosco con:  VITE_PRINT_AGENT_URL=$($prefijo.TrimEnd('/'))"
+    Write-Log "El API debe tener PRINTER_INTERFACE=kiosk."
+    Write-Log "Presiona Ctrl+C para detener."
+
+    function Send-Json {
+        param($Response, [int]$StatusCode, $Obj)
+        $texto = if ($Obj) { $Obj | ConvertTo-Json -Compress } else { '{}' }
+        $bytes = [Text.Encoding]::UTF8.GetBytes($texto)
+        $Response.StatusCode = $StatusCode
+        $Response.ContentType = 'application/json; charset=utf-8'
+        $Response.ContentLength64 = $bytes.Length
+        $Response.OutputStream.Write($bytes, 0, $bytes.Length)
+    }
+
+    try {
+        while ($listenerHttp.IsListening) {
+            $ctx = $listenerHttp.GetContext()
+            $req = $ctx.Request
+            $res = $ctx.Response
+            # CORS: el kiosco (https) llama a http://localhost; Chrome lo permite.
+            $res.Headers.Add('Access-Control-Allow-Origin', '*')
+            $res.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
+            $res.Headers.Add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
+            $res.Headers.Add('Access-Control-Allow-Private-Network', 'true')
+            try {
+                if ($req.HttpMethod -eq 'OPTIONS') {
+                    $res.StatusCode = 204
+                } elseif ($req.HttpMethod -eq 'GET' -and $req.Url.AbsolutePath -eq '/health') {
+                    Send-Json $res 200 @{ ok = $true; printer = $nombreImpresora }
+                } elseif ($req.HttpMethod -eq 'POST' -and $req.Url.AbsolutePath -eq '/print') {
+                    $reader = New-Object System.IO.StreamReader($req.InputStream, $req.ContentEncoding)
+                    $body = $reader.ReadToEnd()
+                    $reader.Close()
+                    $data = $body | ConvertFrom-Json
+                    if (-not $data.b64) {
+                        Send-Json $res 400 @{ ok = $false; error = 'falta b64' }
+                    } else {
+                        $bytes = [Convert]::FromBase64String([string]$data.b64)
+                        $ok = $false
+                        try {
+                            $ok = [TurneroRawPrinter]::SendBytesToPrinter($nombreImpresora, $bytes)
+                        } catch {
+                            Write-Log "Excepcion imprimiendo: $($_.Exception.Message)"
+                        }
+                        if ($ok) {
+                            Write-Log ("Ticket impreso desde el kiosco [{0} bytes]" -f $bytes.Length)
+                        } else {
+                            Write-Log "Fallo al imprimir desde el kiosco."
+                        }
+                        Send-Json $res 200 @{ ok = $ok }
+                    }
+                } else {
+                    Send-Json $res 404 @{ ok = $false; error = 'ruta no encontrada' }
+                }
+            } catch {
+                Write-Log "Error atendiendo peticion: $($_.Exception.Message)"
+                try { Send-Json $res 500 @{ ok = $false } } catch { }
+            } finally {
+                try { $res.OutputStream.Close() } catch { }
+            }
+        }
+    } finally {
+        try { $listenerHttp.Stop() } catch { }
+        Write-Log "Agente detenido."
+    }
+    return
 }
 
 # ------------------------------------------------- modo tcp (servidor -> PC)

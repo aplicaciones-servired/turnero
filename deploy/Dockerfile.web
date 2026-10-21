@@ -29,10 +29,12 @@ ARG VITE_MEDIA_URL=/media
 ARG VITE_SCREEN=1
 ARG CASHIER_BASE=/caja/
 ARG DISPLAY_BASE=/pantalla/
+ARG VITE_PRINT_AGENT_URL=http://localhost:9110
 
 ENV VITE_API_URL=$VITE_API_URL \
     VITE_MEDIA_URL=$VITE_MEDIA_URL \
-    VITE_SCREEN=$VITE_SCREEN
+    VITE_SCREEN=$VITE_SCREEN \
+    VITE_PRINT_AGENT_URL=$VITE_PRINT_AGENT_URL
 
 RUN npm run build --workspace @turnero/kiosk \
  && VITE_BASE=$CASHIER_BASE npm run build --workspace @turnero/cashier \

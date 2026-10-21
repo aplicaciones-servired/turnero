@@ -90,7 +90,9 @@ export class TurnsService {
   // ─────────────────────────────────────────────────────────────
 
   /** Genera un turno (bloquea el servicio), lo guarda en tablatemporal/auditoria y lo imprime. */
-  async generate(serviceId: string): Promise<{ turn: TurnDTO; printed: boolean }> {
+  async generate(
+    serviceId: string
+  ): Promise<{ turn: TurnDTO; printed: boolean; ticket?: string }> {
     const idServicio = Number(serviceId);
     const transaction = await this.sequelize.transaction();
     let tablaId!: number;
@@ -189,9 +191,9 @@ export class TurnsService {
 
     const settings = await this.settings.get();
     const serviceDto = await this.serviceDto(Number(serviceId));
-    const { printed } = await this.printer.printTurn(dto, serviceDto, settings);
+    const { printed, ticket } = await this.printer.printTurn(dto, serviceDto, settings);
 
-    return { turn: dto, printed };
+    return { turn: dto, printed, ticket };
   }
 
   async snapshot(): Promise<SnapshotDTO> {

@@ -63,8 +63,9 @@ Internet
 | `CORS_ORIGINS` | `https://turnero.serviredgane.cloud`. |
 | `SEDE_ID` / `EMP_ID` | Sede y empresa de MagisoftV1. |
 | `ESTADO_ESPERA` / `ESTADO_LLAMANDO` / `ESTADO_TERMINADO` / `ESTADO_CANCELADO` | Estados de turno. |
-| `PRINTER_INTERFACE` | Cómo imprimir: `queue` (agente remoto, **recomendado**), `tcp://IP:9100`, `win:Nombre`, `/dev/usb/lp0`, o vacío (`auto`). |
+| `PRINTER_INTERFACE` | Cómo imprimir: `kiosk` (**el propio kiosco imprime**, como el master), `queue` (agente remoto), `tcp://IP:9100`, `win:Nombre`, `/dev/usb/lp0`, o vacío (`auto`). |
 | `PRINTER_AGENT_TOKEN` | Token compartido con el agente de impresión. **Obligatorio** cuando `PRINTER_INTERFACE=queue`. |
+| `PRINT_AGENT_URL` | URL del agente local de impresión en la PC del kiosco (`http://localhost:9110`). Se usa cuando `PRINTER_INTERFACE=kiosk`. |
 | `PRINTER_TYPE` / `PRINTER_WIDTH` / `PRINTER_CHARACTER_SET` | Tipo de comandos (`epson`), ancho de papel (`48`) y juego de caracteres (`PC850_MULTILINGUAL`). |
 | `DISPLAY_SCREEN` | Número de pantalla del visualizador (`1` por defecto). |
 
@@ -164,6 +165,68 @@ Luego, en el **PC que tiene la impresora USB**:
 
 > El agente **no necesita** puerto abierto ni que el servidor lo alcance: solo conexión
 > saliente a `https://turnero.serviredgane.cloud`.
+
+### Modo kiosco (imprime el propio kiosco, como el turnero master)
+
+Equivale a como imprimía el turnero **master**: la impresora va conectada al **mismo PC del
+kiosco** y es el propio kiosco el que manda el ticket a imprimir. No depende de que el
+servidor alcance ninguna impresora ni de un agente «saliente».
+
+```
+Kiosco (página web) ──POST /turns──► API ──devuelve ticket (ESC/POS base64)──►
+Kiosco ──POST http://localhost:<puerto>/print──► agente local (PC del kiosco) ──► impresora USB
+```
+
+Configuración en el `.env` de producción (credential de Jenkins):
+
+```env
+PRINTER_INTERFACE=kiosk
+PRINT_AGENT_URL=http://localhost:9110
+```
+
+Luego, en el **PC del kiosco**:
+
+1. Copia `deploy/print-agent/` (`PrintAgent.ps1` y un `agent.json`).
+2. Instala el agente en modo **local** (crea la tarea `TurneroPrintAgentLocal`, que
+   arranca al iniciar sesión):
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\PrintAgent.ps1 -Mode local -Port 9110 -Install
+   ```
+
+   No hace falta tocar el `agent.json`: la tarea lleva el modo y el puerto en sus
+   argumentos (y así convive con el agente `poll`, que usa el `agent.json`).
+
+   Si prefieres configurarlo por archivo, crea `agent.json` con:
+
+   ```json
+   {
+     "mode": "local",
+     "printer": "",
+     "port": 9110
+   }
+   ```
+
+   (`printer` vacío = autodetecta la térmica; `port` es el puerto en `localhost`.)
+
+3. Comprueba que el agente responde:
+
+   ```powershell
+   Invoke-RestMethod http://localhost:9110/health
+   # -> ok      : True
+   #    printer  : POS-80-Series
+   ```
+
+4. Abre el kiosco en Chrome. **No** hace falta configurar nada más: por defecto el kiosco
+   llama a `http://localhost:9110/print`. Para cambiar la URL, define `PRINT_AGENT_URL`
+   en el `.env` de producción (o `VITE_PRINT_AGENT_URL` al compilar el kiosco).
+
+> Chrome permite que una página **https** llame a **http://localhost** (origen de confianza),
+> por eso funciona aunque el kiosco se sirva por HTTPS. El ticket ya viene armado por el API
+> (mismo diseño de ticket que en el modo cola).
+>
+> **Cada PC de kiosco necesita su propio agente local**; si un kiosco no lo tiene, el turno
+> se crea igual pero no se imprime ticket.
 
 ### Impresora USB conectada al propio servidor
 

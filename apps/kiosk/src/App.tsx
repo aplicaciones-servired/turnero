@@ -1,11 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ServiceDTO, ServiceTreeDTO, SettingsDTO, TurnDTO } from "@turnero/shared";
-import { api } from "./api";
+import { api, PRINT_AGENT_URL } from "./api";
 
 interface GenerateResponse {
   turn: TurnDTO;
   printed: boolean;
+  /** Ticket ESC/POS en base64 que el kiosco debe imprimir en su impresora local. */
+  ticket?: string;
+}
+
+/**
+ * Envia el ticket a la impresora local del kiosco (agente PrintAgent.ps1 en modo local),
+ * replicando como el turnero master imprimia desde el propio kiosco (Impresion.php).
+ */
+async function printLocally(b64: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 8000);
+  try {
+    const res = await fetch(`${PRINT_AGENT_URL}/print`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ b64 }),
+      signal: controller.signal,
+    });
+    if (!res.ok) return false;
+    const json = (await res.json().catch(() => ({}))) as { ok?: boolean };
+    return json.ok !== false;
+  } catch {
+    return false;
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 export default function App() {
@@ -56,7 +82,11 @@ export default function App() {
     setError(null);
     try {
       const { data } = await api.post<GenerateResponse>("/turns", { serviceId: selected.id });
-      setResult(data);
+      let printed = data.printed;
+      if (data.ticket) {
+        printed = await printLocally(data.ticket);
+      }
+      setResult({ ...data, printed });
       setSelected(null);
       setExpanded(null);
       scheduleReset();

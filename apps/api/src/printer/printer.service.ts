@@ -41,6 +41,12 @@ export class PrinterService {
    * conectar hacia la impresora (red corporativa que bloquea eso).
    */
   private readonly queueMode: boolean;
+  /**
+   * Modo kiosco (PRINTER_INTERFACE=kiosk): el API NO imprime; arma el ticket y lo
+   * devuelve al kiosco para que este lo imprima en la impresora de SU PC, igual que
+   * hacia el turnero master (el kiosco llamaba a Impresion.php en localhost).
+   */
+  private readonly kioskMode: boolean;
   /** Token compartido con el agente (PRINTER_AGENT_TOKEN). Sin el, la cola no se expone. */
   private readonly agentToken: string | null;
   private queue: Array<{ id: number; code: string; serviceName: string; b64: string }> = [];
@@ -60,10 +66,11 @@ export class PrinterService {
     const lower = rawIface.toLowerCase();
     const explicitWin = lower.startsWith("win:") && lower !== "win:auto";
     this.queueMode = lower === "queue" || lower.startsWith("queue://");
+    this.kioskMode = lower === "kiosk" || lower.startsWith("kiosk://");
     this.agentToken =
       (config.get<string>("PRINTER_AGENT_TOKEN") ?? "").trim() || null;
 
-    if (this.queueMode) {
+    if (this.queueMode || this.kioskMode) {
       this.winName = null;
       this.iface = "";
     } else if (lower === "none" || lower === "simulado" || lower === "off") {
@@ -111,9 +118,11 @@ export class PrinterService {
       `Printer: ${
         this.queueMode
           ? "COLA (lo imprime el agente remoto)"
-          : this.winName
-            ? `winspool -> ${this.winName}`
-            : this.iface || "SIMULADO"
+          : this.kioskMode
+            ? "KIOSCO (lo imprime el kiosco en su impresora local)"
+            : this.winName
+              ? `winspool -> ${this.winName}`
+              : this.iface || "SIMULADO"
       } | ` +
         `charset=${this.charset} width=${this.defaultWidth}` +
         (this.envLogoPath ? ` logo=${this.envLogoPath}` : "")
@@ -206,12 +215,28 @@ export class PrinterService {
     printer.setTextSize(n, n);
   }
 
-  /** Imprime el ticket del turno. */
+  /** Imprime el ticket del turno. En modo kiosco devuelve el ticket (base64) sin imprimir. */
   async printTurn(
     turn: TurnDTO,
     service: ServiceDTO,
     settings: SettingsDTO
-  ): Promise<{ printed: boolean }> {
+  ): Promise<{ printed: boolean; ticket?: string }> {
+    // ── Modo kiosco: se arma el ticket y lo imprime el propio kiosco (como el master) ──
+    if (this.kioskMode) {
+      try {
+        const kiosco = this.build(settings.printWidth);
+        await this.fillTicket(kiosco, turn, service, settings);
+        const buffer = kiosco.getBuffer();
+        if (!buffer || buffer.length === 0) throw new Error("buffer vacio");
+        return { printed: false, ticket: buffer.toString("base64") };
+      } catch (err) {
+        this.logger.error(
+          `Error preparando ticket ${turn.code} para el kiosco: ${(err as Error).message}`
+        );
+        return { printed: false };
+      }
+    }
+
     // ── Modo cola: se arma el ticket pero quien lo imprime es el agente remoto ──
     if (this.queueMode) {
       try {
@@ -395,6 +420,9 @@ export class PrinterService {
     if (this.queueMode) {
       // El agente se encarga; el API solo mantiene la cola.
       connected = true;
+    } else if (this.kioskMode) {
+      // El kiosco imprime en su propia impresora; el API no puede sondearla.
+      connected = true;
     } else if (this.winName) {
       // Windows: la impresora se detecto al arrancar; winspool no permite sondear sin imprimir.
       connected = true;
@@ -413,15 +441,19 @@ export class PrinterService {
         ? `win:${this.winName}`
         : this.queueMode
           ? "queue (agente remoto)"
-          : this.iface || "simulado",
+          : this.kioskMode
+            ? "kiosk (impresora del kiosco)"
+            : this.iface || "simulado",
       width: this.defaultWidth,
       mode: this.winName
         ? "winspool"
         : this.queueMode
           ? "queue"
-          : this.iface
-            ? "interface"
-            : "simulado",
+          : this.kioskMode
+            ? "kiosk"
+            : this.iface
+              ? "interface"
+              : "simulado",
       logos: this.listLogos(),
       qrTemplate: this.envQrTemplate ?? "",
       openDrawer: this.envOpenDrawer,

@@ -49,6 +49,7 @@ services:
         CASHIER_BASE: /caja/
         DISPLAY_BASE: /pantalla/
         VITE_SCREEN: ${DISPLAY_SCREEN:-1}
+        VITE_PRINT_AGENT_URL: ${PRINT_AGENT_URL:-http://localhost:9110}
     restart: unless-stopped
     depends_on:
       api:
