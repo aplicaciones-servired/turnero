@@ -341,9 +341,9 @@ function anunciarLlamado(turn, modulo) {
     //
     var llamado = formatearLlamado(nombre, tipo);
     //
-    var htmlTurno = '<div style="background: rgb(147, 226, 250);width: 80%;height: 80%;display: flex;flex-direction: column;justify-content: center;align-items: center; border: 1px solid black">';
-    htmlTurno += '<h1 style="font-size: 400%; color:red">' + tipo + ', ' + nombre + '</h1>';
-    htmlTurno += '<h2 style="font-size: 400%; color:red">' + (modulo || "") + '</h2></div>';
+    var htmlTurno = '<div class="turno-grande" style="background: rgb(147, 226, 250);width: 80%;height: 80%;display: flex;flex-direction: column;justify-content: center;align-items: center; text-align: center; border: 1px solid black; overflow: hidden;">';
+    htmlTurno += '<h1 style="font-size: clamp(4vw, 14vw, 12vh); color:red; margin: 0; line-height: 1.1; white-space: normal; word-break: break-word;">' + tipo + ', ' + nombre + '</h1>';
+    htmlTurno += '<h2 style="font-size: clamp(3vw, 10vw, 9vh); color:red; margin: 2vh 0 0 0; line-height: 1.1; white-space: normal; word-break: break-word;">' + (modulo || "") + '</h2></div>';
     //
     var volumenVoz = 0;
     //
@@ -573,37 +573,49 @@ function cargarConfig() {
 //
 function voz(text, volumen) {
     //
+    if (!text) return;
+    var vol = (typeof volumen === 'number') ? volumen : 1;
+    if (vol > 1) vol = 1;
+    if (vol < 0.1) vol = 0.1;
+    //
     // 1) TTS nativo: dentro del APK MainActivity expone window.AndroidTTS.
-    //    Android TV no trae voces para el Web Speech API.
-    if (window.AndroidTTS && text) {
-        //
+    if (window.AndroidTTS) {
         try {
+            // Si el puente dice que NO hay motor de voz listo, usar directamente el servidor
+            if (typeof window.AndroidTTS.disponible === 'function') {
+                if (!window.AndroidTTS.disponible()) {
+                    throw new Error('tts no disponible');
+                }
+            }
             //
             window.AndroidTTS.speak('v' + Date.now() + '-' + Math.random(), text, 0.9, 1);
             return;
         } catch (e) {
-            // Si el puente falla, se intenta con speechSynthesis.
+            // Si falla o no está disponible, usar TTS del servidor.
         }
     }
     //
-    // 2) MP3 desde el servidor (Google TTS via /api/tts) - voz menos robotica.
+    // 2) MP3 desde el servidor (voces mas naturales) - funciona en Android WebView
     try {
-        if (text) {
-            var tl = (typeof CFG !== 'undefined' && CFG.ttsLang) ? CFG.ttsLang : 'es';
-            var u = apiBase.replace(/\/api\/?$/, '') + '/api/tts?tl=' + encodeURIComponent(tl) + '&text=' + encodeURIComponent(text);
-            var a = new Audio(u);
-            a.volume = (typeof volumen === 'number') ? volumen : 1;
-            a.play().catch(function () {});
-            return;
+        var tl = (typeof CFG !== 'undefined' && CFG.ttsLang) ? CFG.ttsLang : 'es';
+        var base = (typeof apiBase !== 'undefined') ? apiBase : ((typeof CFG !== 'undefined' && CFG.apiUrl) ? CFG.apiUrl : 'http://localhost:3001/api');
+        base = base.replace(/\/+$/, '');
+        var root = base.replace(/\/api\/?$/, '');
+        var urlTts = root + '/api/tts?tl=' + encodeURIComponent(tl) + '&text=' + encodeURIComponent(text);
+        var a = new Audio();
+        a.volume = vol;
+        a.src = urlTts;
+        var p = a.play();
+        if (p && typeof p.catch === 'function') {
+            p.catch(function () {});
         }
+        return;
     } catch (e) {
         // fallback
     }
     //
-    // 3) Web Speech API (navegadores de escritorio). Nunca debe romper la app:
-    //    si no existe, la pantalla sigue sin voz pero carga la informacion.
+    // 3) Web Speech API (navegadores de escritorio)
     try {
-        //
         if (typeof speechSynthesis === 'undefined' || typeof SpeechSynthesisUtterance === 'undefined') {
             return;
         }
@@ -611,7 +623,8 @@ function voz(text, volumen) {
         var u2 = new SpeechSynthesisUtterance();
         u2.text = text;
         u2.lang = 'es-ES';
-        u2.volume = volumen;
+        u2.volume = vol;
+        speechSynthesis.cancel();
         speechSynthesis.speak(u2);
     } catch (e) {
         console.warn("voz no disponible", e);
