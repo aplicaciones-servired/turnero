@@ -586,7 +586,21 @@ function voz(text, volumen) {
         }
     }
     //
-    // 2) Web Speech API (navegadores de escritorio). Nunca debe romper la app:
+    // 2) MP3 desde el servidor (Google TTS via /api/tts) - voz menos robotica.
+    try {
+        if (text) {
+            var tl = (typeof CFG !== 'undefined' && CFG.ttsLang) ? CFG.ttsLang : 'es';
+            var u = apiBase.replace(/\/api\/?$/, '') + '/api/tts?tl=' + encodeURIComponent(tl) + '&text=' + encodeURIComponent(text);
+            var a = new Audio(u);
+            a.volume = (typeof volumen === 'number') ? volumen : 1;
+            a.play().catch(function () {});
+            return;
+        }
+    } catch (e) {
+        // fallback
+    }
+    //
+    // 3) Web Speech API (navegadores de escritorio). Nunca debe romper la app:
     //    si no existe, la pantalla sigue sin voz pero carga la informacion.
     try {
         //
@@ -594,11 +608,11 @@ function voz(text, volumen) {
             return;
         }
         //
-        var u = new SpeechSynthesisUtterance();
-        u.text = text;
-        u.lang = 'es-ES';
-        u.volume = volumen;
-        speechSynthesis.speak(u);
+        var u2 = new SpeechSynthesisUtterance();
+        u2.text = text;
+        u2.lang = 'es-ES';
+        u2.volume = volumen;
+        speechSynthesis.speak(u2);
     } catch (e) {
         console.warn("voz no disponible", e);
     }

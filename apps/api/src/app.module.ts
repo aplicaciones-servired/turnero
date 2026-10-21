@@ -15,6 +15,7 @@ import { ApkModule } from "./apk/apk.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { VisualizerModule } from "./visualizer/visualizer.module";
 import { ModulosModule } from "./modulos/modulos.module";
+import { TtsModule } from "./tts/tts.module";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { ModulosModule } from "./modulos/modulos.module";
     VisualizerModule,
     SettingsModule,
     ModulosModule,
+    TtsModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
