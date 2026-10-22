@@ -207,9 +207,57 @@ public class MainActivity extends Activity {
             });
         }
 
-        /** Dos notas ascendentes: el aviso suave previo a la voz. */
+        /** Reproduce un MP3 desde una URL (mas fiable que Audio() en Android WebView). */
         @JavascriptInterface
-        public void chime() {
+        public void playAudio(final String url, final double volume) {
+            final String u = url == null ? "" : url;
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (u.isEmpty()) {
+                        return;
+                    }
+                    try {
+                        final android.media.MediaPlayer mp = new android.media.MediaPlayer();
+                        mp.setAudioStreamType(android.media.AudioManager.STREAM_MUSIC);
+                        try {
+                            float v = (float) Math.max(0.1, Math.min(1.0, volume));
+                            mp.setVolume(v, v);
+                        } catch (Exception ignored) {
+                        }
+                        mp.setDataSource(u);
+                        mp.setOnPreparedListener(new android.media.MediaPlayer.OnPreparedListener() {
+                            @Override
+                            public void onPrepared(android.media.MediaPlayer mediaPlayer) {
+                                mediaPlayer.start();
+                            }
+                        });
+                        mp.setOnCompletionListener(new android.media.MediaPlayer.OnCompletionListener() {
+                            @Override
+                            public void onCompletion(android.media.MediaPlayer mediaPlayer) {
+                                try {
+                                    mediaPlayer.release();
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        });
+                        mp.setOnErrorListener(new android.media.MediaPlayer.OnErrorListener() {
+                            @Override
+                            public boolean onError(android.media.MediaPlayer mediaPlayer, int what, int extra) {
+                                try {
+                                    mediaPlayer.release();
+                                } catch (Exception ignored) {
+                                }
+                                return true;
+                            }
+                        });
+                        mp.prepareAsync();
+                    } catch (Exception e) {
+                        // Si falla, dejamos que el JS intente con Audio().
+                    }
+                }
+            });
+        }
             handler.post(new Runnable() {
                 @Override public void run() {
                     try {
