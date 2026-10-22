@@ -65,19 +65,42 @@ export class VisualizerService {
     return row?.IpVisualizador ?? null;
   }
 
-  /** Configuracion del visualizador (cargarConfig). */
+  /** Configuracion del visualizador (cargarConfig).
+   *  Si la fila de esta pantalla no tiene un valor (mensaje, logo, tamano de
+   *  letra, volumen), se usa el primer valor configurado en cualquier fila.
+   *  Asi lo que se guarda en el admin aplica a todas las TVs. */
   async config(screen: number): Promise<VisualizerConfig | null> {
-    const row = await this.configModel.findOne({ where: { estado: screen } });
-    if (!row) return null;
+    const rows = await this.configModel.findAll({ order: [["id", "ASC"]] });
+    if (!rows.length) return null;
+
+    const own = rows.find((r) => Number(r.estado) === screen) ?? null;
+    const ordered = own ? [own, ...rows.filter((r) => r !== own)] : rows;
+
+    const texto = (get: (r: Configtv) => string | null | undefined): string => {
+      for (const r of ordered) {
+        const v = get(r);
+        if (v != null && String(v).trim() !== "") return String(v);
+      }
+      return "";
+    };
+    const numero = (get: (r: Configtv) => number | null | undefined): number | null => {
+      for (const r of ordered) {
+        const v = get(r);
+        if (v != null && Number.isFinite(Number(v))) return Number(v);
+      }
+      return null;
+    };
+
+    const nombreLogo = texto((r) => r.nombreLogo);
     return {
-      mensaje: row.mensaje ?? "",
-      tamanoLetra: row.TamanoLetra,
-      nombrelogo: row.nombreLogo ?? "",
-      logo: row.nombreLogo ?? "",
-      cambioTv: row.CambioTv ?? "",
-      volumenVoz: row.VolumenVoz,
-      ipVisualizador: row.IpVisualizador ?? "",
-      id: row.id,
+      mensaje: texto((r) => r.mensaje),
+      tamanoLetra: numero((r) => r.TamanoLetra),
+      nombrelogo: nombreLogo,
+      logo: nombreLogo,
+      cambioTv: texto((r) => r.CambioTv),
+      volumenVoz: numero((r) => r.VolumenVoz),
+      ipVisualizador: texto((r) => r.IpVisualizador),
+      id: (own ?? ordered[0]).id,
     };
   }
 

@@ -47,9 +47,57 @@
     padding-top: 1.5vh;
 }
 
+/* Tamano por defecto (cuando el admin no fija TamanoLetra). Usa vh para que
+   escale con el tamano de la TV. */
+.items{
+    font-size: 4vh;
+    line-height: 1.15;
+}
+
+.fecha{
+    font-size: 3vh;
+    color: white;
+    padding-top: 2vh;
+}
+
+.hora{
+    font-size: 4.2vh;
+    font-weight: bold;
+    color: white;
+}
+
+#mesaje{
+    font-size: 3.6vh;
+    color: white;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+}
+
+#mesaje marquee{
+    width: 100%;
+}
+
 .panelMensaje{
     height: 100%;
     text-align: center;
+}
+
+/* Barra inferior con el mensaje: fondo azul para que el texto blanco se lea
+   sobre la parte clara de la imagen de fondo. */
+.panelAbajo{
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 14vh;
+    width: 100%;
+    color: white;
+    background: linear-gradient(to bottom, rgba(43,123,160,1) 0%, rgba(16,63,84,1) 100%);
+}
+
+.panelAbajo .fecha{
+    padding-top: 1vh;
 }
 
 .panelFecha{

@@ -548,22 +548,28 @@ function cargarConfig() {
             //
             if (data.length > 0) {
                 //
-                for (var i = 0; i < 5; i++) {
-                    //
-                    document.getElementById("modulo" + i).style.fontSize = data[0]['tamanoLetra'] + 'px';
-                    document.getElementById("cliente" + i).style.fontSize = data[0]['tamanoLetra'] + 'px';
+                // Tamano de letra configurado en el admin (+15% para que se lea
+                // mejor en TV). Si no hay valor, manda el CSS.
+                var letra = parseInt(data[0]['tamanoLetra'], 10);
+                if (letra > 0) {
+                    letra = Math.min(Math.round(letra * 1.15), 90);
+                    for (var i = 0; i < 5; i++) {
+                        document.getElementById("modulo" + i).style.fontSize = letra + 'px';
+                        document.getElementById("cliente" + i).style.fontSize = letra + 'px';
+                    }
+                    document.getElementById("divFecha").style.fontSize = Math.round(letra / 2) + 'px';
+                    document.getElementById("mesaje").style.fontSize = letra + 'px';
                 }
-                //
-                var valorT = data[0]['tamanoLetra'] / 2;
-                document.getElementById("divFecha").style.fontSize = valorT + 'px';
-                document.getElementById("mesaje").style.fontSize = data[0]['tamanoLetra'] + 'px';
                 //
                 if (data[0]['nombrelogo'] !== '') {
                     //
                     document.getElementById("logoCambiar").setAttribute('src', urlImagen + data[0]['nombrelogo']);
                 }
                 //
-                $$('#mesaje').html('<MARQUEE WIDTH=100%>' + data[0]['mensaje'] + '</MARQUEE>');
+                var texto = data[0]['mensaje'];
+                if (texto && String(texto).trim() !== '') {
+                    $$('#mesaje').html('<MARQUEE WIDTH=100%>' + texto + '</MARQUEE>');
+                }
                 //
                 arrayC = data[0];
             }

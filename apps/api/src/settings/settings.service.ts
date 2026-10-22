@@ -28,11 +28,10 @@ export class SettingsService {
     await row.save();
 
     if (marquee !== undefined || voiceVolume !== undefined) {
-      const sedeId = this.sedeId;
-      const config = sedeId !== null
-        ? await this.configModel.findOne({ where: { IdSede: sedeId } })
-        : await this.configModel.findOne();
-      if (config) {
+      // Mensaje y volumen son globales: se guardan en todas las filas de
+      // configtv para que cualquier pantalla (estado 1, 2, 3, 4...) los lea.
+      const configs = await this.configModel.findAll();
+      for (const config of configs) {
         if (marquee !== undefined) config.mensaje = marquee;
         if (voiceVolume !== undefined) config.VolumenVoz = voiceVolume;
         await config.save();
