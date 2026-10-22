@@ -9,6 +9,11 @@ import { UpdateSettingsDto } from "./dto/update-settings.dto";
 
 @Injectable()
 export class SettingsService {
+  /** Cache corta: el kiosco pide un turno por vez y no hace falta releer la
+   *  configuracion (3 consultas) en cada ticket. `update()` la refresca. */
+  private static readonly TTL_MS = 10_000;
+  private cached: { at: number; value: SettingsDTO } | null = null;
+
   constructor(
     @InjectModel(Setting) private readonly model: typeof Setting,
     @InjectModel(Configtv) private readonly configModel: typeof Configtv,
@@ -17,8 +22,13 @@ export class SettingsService {
   ) {}
 
   async get(): Promise<SettingsDTO> {
+    if (this.cached && Date.now() - this.cached.at < SettingsService.TTL_MS) {
+      return this.cached.value;
+    }
     const [row] = await this.model.findOrCreate({ where: { id: 1 } });
-    return this.toDto(row);
+    const dto = await this.toDto(row);
+    this.cached = { at: Date.now(), value: dto };
+    return dto;
   }
 
   async update(dto: UpdateSettingsDto): Promise<SettingsDTO> {
@@ -38,7 +48,9 @@ export class SettingsService {
       }
     }
 
-    return this.toDto(row);
+    const resultado = await this.toDto(row);
+    this.cached = { at: Date.now(), value: resultado };
+    return resultado;
   }
 
   private get sedeId(): number | null {

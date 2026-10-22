@@ -148,15 +148,20 @@ export class TurnsService {
     const reiniciar = await this.reiniciarNumeracion(idServicio, hoy);
     const transaction = await this.sequelize.transaction();
     let tablaId!: number;
+    let servicio!: Servicio;
+    let next = 0;
+    let code = "";
+    const now = new Date();
     try {
-      const servicio = await this.servicioModel.findByPk(idServicio, {
+      const fila = await this.servicioModel.findByPk(idServicio, {
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
-      if (!servicio) throw new NotFoundException("Servicio no encontrado");
-      if (servicio.Eliminado === 1) {
+      if (!fila) throw new NotFoundException("Servicio no encontrado");
+      if (fila.Eliminado === 1) {
         throw new BadRequestException("El servicio no esta disponible");
       }
+      servicio = fila;
 
       const min = servicio.Cont_min ?? 0;
       const max = servicio.Cont_max ?? 999;
@@ -183,13 +188,13 @@ export class TurnsService {
           );
         }
       }
-      let next = (servicio.Secuencia ?? 0) + 1;
-      if (next > max) next = min;
-      servicio.Secuencia = next;
+      let siguiente = (servicio.Secuencia ?? 0) + 1;
+      if (siguiente > max) siguiente = min;
+      servicio.Secuencia = siguiente;
+      next = siguiente;
       await servicio.save({ transaction });
 
-      const code = this.buildCode(servicio.Prefijo, next);
-      const now = new Date();
+      code = this.buildCode(servicio.Prefijo, next);
 
       const auditoriaId =
         Number((await this.auditoriaModel.max("IdAuditoria", { transaction })) ?? 0) + 1;
@@ -263,14 +268,34 @@ export class TurnsService {
 
     this.diaTurnos.set(idServicio, hoy);
 
-    const tabla = await this.tablaModel.findByPk(tablaId);
-    const dto = await this.toDto(tabla!);
+    // El kiosco necesita la respuesta cuanto antes: el DTO se arma con los
+    // datos que ya tenemos (evita releer la fila de la base) y la difusion a
+    // pantallas/caja se hace sin bloquear la respuesta.
+    const dto: TurnDTO = {
+      id: String(tablaId),
+      number: next,
+      code,
+      status: "waiting",
+      serviceId: String(idServicio),
+      serviceName: servicio.Servicio ?? undefined,
+      servicePrefix: servicio.Prefijo ?? undefined,
+      counterId: null,
+      counterName: "ASESOR",
+      createdAt: now.toISOString(),
+      calledAt: null,
+      finishedAt: null,
+    };
     this.gateway.emitTurnCreated(dto);
-    await this.broadcastSnapshot();
+    void this.broadcastSnapshot().catch((err) =>
+      this.logger.warn(`No se pudo difundir la cola: ${(err as Error).message}`)
+    );
 
     const settings = await this.settings.get();
-    const serviceDto = await this.serviceDto(Number(serviceId));
-    const { printed, ticket } = await this.printer.printTurn(dto, serviceDto, settings);
+    const { printed, ticket } = await this.printer.printTurn(
+      dto,
+      this.serviceDtoFrom(servicio),
+      settings
+    );
 
     return { turn: dto, printed, ticket };
   }
@@ -832,8 +857,8 @@ export class TurnsService {
     return Number.isFinite(n) ? n : null;
   }
 
-  private async serviceDto(idServicio: number): Promise<ServiceDTO> {
-    const s = await this.servicioModel.findByPk(idServicio);
+  private serviceDtoFrom(s: Servicio | null | undefined): ServiceDTO {
+    const idServicio = s?.IdServicio ?? 0;
     return {
       id: String(idServicio),
       name: s?.Servicio ?? `Servicio ${idServicio}`,

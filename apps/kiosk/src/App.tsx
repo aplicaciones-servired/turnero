@@ -57,6 +57,12 @@ export default function App() {
     };
   }, []);
 
+  // Precalienta el agente de impresion local: el primer ticket no paga el
+  // handshake de la conexion.
+  useEffect(() => {
+    void fetch(`${PRINT_AGENT_URL}/health`).catch(() => undefined);
+  }, []);
+
   const scheduleReset = () => {
     if (resetTimer.current) window.clearTimeout(resetTimer.current);
     resetTimer.current = window.setTimeout(() => {
@@ -82,13 +88,22 @@ export default function App() {
     setError(null);
     try {
       const { data } = await api.post<GenerateResponse>("/turns", { serviceId: service.id });
-      let printed = data.printed;
-      if (data.ticket) {
-        printed = await printLocally(data.ticket);
-      }
-      setResult({ ...data, printed });
+      // El turno ya existe: mostrarlo de inmediato y mandar el ticket a la
+      // impresora en segundo plano (el kiosco no espera al agente local).
+      setResult({ ...data, printed: false });
       setExpanded(null);
       scheduleReset();
+      if (data.ticket) {
+        const ticket = data.ticket;
+        const turnId = data.turn.id;
+        void printLocally(ticket).then((printed) => {
+          if (printed) {
+            setResult((prev) =>
+              prev && prev.turn.id === turnId ? { ...prev, printed: true } : prev
+            );
+          }
+        });
+      }
     } catch {
       setError("No se pudo generar el turno. Intente nuevamente.");
     } finally {
