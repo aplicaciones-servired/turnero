@@ -163,8 +163,10 @@ export class TurnsService {
       if (reiniciar) {
         // Primer turno del dia de este servicio: vuelve a Cont_min (01) y saca
         // de la cola los pendientes de dias anteriores, para que no queden dos
-        // F-001 visibles al mismo tiempo.
-        servicio.Secuencia = (servicio.Cont_min ?? 1) - 1;
+        // F-001 visibles al mismo tiempo. En la base legacy Cont_min viene en 0
+        // para varios servicios, pero el primer turno del dia debe ser 001.
+        const minDia = servicio.Cont_min && servicio.Cont_min > 0 ? servicio.Cont_min : 1;
+        servicio.Secuencia = minDia - 1;
         const [cancelados] = await this.tablaModel.update(
           { Estado: this.estadoCancelado },
           {
