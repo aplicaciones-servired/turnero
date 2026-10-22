@@ -1,0 +1,11 @@
+[Unit]
+Description=Turnero - ejecuta el watchdog cada minuto
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=15s
+Unit=turnero-watchdog.service
+
+[Install]
+WantedBy=timers.target

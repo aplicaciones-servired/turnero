@@ -1,0 +1,12 @@
+[Unit]
+Description=Turnero - respaldo diario de base de datos y medios
+Documentation=file:///opt/turnero/deploy/README.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/turnero/deploy/backup.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

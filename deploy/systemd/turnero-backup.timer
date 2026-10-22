@@ -1,0 +1,10 @@
+[Unit]
+Description=Turnero - respaldo diario a las 02:30
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+Unit=turnero-backup.service
+
+[Install]
+WantedBy=timers.target

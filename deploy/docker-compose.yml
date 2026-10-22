@@ -11,6 +11,14 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.api
     restart: unless-stopped
+    stop_grace_period: 30s
+    # Sin rotacion, los logs de Docker llenan el disco del servidor y tumban
+    # todo el stack de golpe.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     env_file:
       - .env
     environment:
@@ -51,8 +59,16 @@ services:
         VITE_SCREEN: ${DISPLAY_SCREEN:-1}
         VITE_PRINT_AGENT_URL: ${PRINT_AGENT_URL:-http://localhost:9110}
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     depends_on:
       api:
+        # Ojo: `service_healthy` haria que `up -d` espere al API para siempre
+        # si la base legacy no responde al arrancar (el API reintenta y muere).
+        # nginx ya resuelve la IP del API en cada peticion (ver nginx.conf).
         condition: service_started
     networks:
       red-gane-int:

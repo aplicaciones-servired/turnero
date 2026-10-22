@@ -117,6 +117,101 @@ sudo docker compose -f deploy/docker-compose.yml restart api
 sudo docker compose -f deploy/docker-compose.yml up -d --force-recreate
 ```
 
+## Disponibilidad (watchdog, alertas y respaldos)
+
+Objetivo: que un fallo se recupere solo y que, si no se recupera, **te enteres antes
+que el cliente**.
+
+### Qué ya hace el stack (tras desplegar)
+
+| Medida | Dónde | Para qué |
+|---|---|---|
+| `restart: unless-stopped` | compose | El contenedor vuelve solo si el proceso muere o si el servidor reinicia. |
+| Healthcheck del API | compose | Detecta el proceso colgado. |
+| `depends_on: service_healthy` | compose | `web` no arranca si el API no está sano. |
+| Rotación de logs (`10m x 3`) | compose | Los logs ya no pueden llenar el disco (la causa #1 de "amaneció caído"). |
+| `resolver 127.0.0.11` en nginx | `nginx.conf` | Tras recrear el API, nginx no se queda con la IP vieja → se evita el 502 y la pantalla congelada. |
+| `/api/health` y `/api/health/ready` | API | El segundo comprueba la base legacy; úsalo en el monitoreo externo. |
+
+### Instalar el watchdog y el respaldo (una sola vez, en el servidor)
+
+Los scripts trabajan contra los contenedores (`docker ps` con la etiqueta del
+proyecto), **no** necesitan el `.env` ni el compose: siguen funcionando después de
+que Jenkins borra su `.env` temporal.
+
+```bash
+sudo mkdir -p /opt/turnero
+sudo cp -r deploy /opt/turnero/deploy
+sudo chmod +x /opt/turnero/deploy/watchdog.sh /opt/turnero/deploy/backup.sh
+sudo install -m 644 /opt/turnero/deploy/systemd/*.service /etc/systemd/system/
+sudo install -m 644 /opt/turnero/deploy/systemd/*.timer   /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now turnero-watchdog.timer turnero-backup.timer
+```
+
+> Al actualizar el repo, vuelve a copiar `deploy/` a `/opt/turnero/deploy`.
+
+Comprobar que corre:
+
+```bash
+systemctl list-timers 'turnero-*'
+journalctl -u turnero-watchdog -n 30
+tail -n 50 /var/log/turnero-watchdog.log
+```
+
+- **Watchdog** (cada minuto): si un contenedor pasa 3 chequeos `unhealthy`, lo
+  reinicia; si el API no responde por nginx 3 veces seguidas, reinicia `web` y `api`;
+  si la base no responde, avisa sin reiniciar; los domingos limpia imágenes y caché.
+- **Respaldo** (diario 02:30, `Persistent=true` recupera el que se perdió si el
+  servidor estaba apagado): `mysqldump` de la base legacy + `tar.gz` de los medios en
+  `/var/backups/turnero`, con 14 días de retención. Verifica la copia con `gzip -t`.
+
+```bash
+# Respaldo manual
+sudo /opt/turnero/deploy/backup.sh
+ls -lh /var/backups/turnero
+```
+
+Restaurar (con el turnero detenido para no escribir durante la restauración):
+
+```bash
+cd /var/backups/turnero
+gunzip -c db-AAAAmmdd-HHMM.sql.gz | sudo docker exec -i turnero-api-1 sh -c \
+  'mysql --host="$DB_HOST" --user="$DB_USER" -p"$DB_PASS" "$DB_NAME"'
+sudo docker exec -i turnero-api-1 tar xzf - -C /app/apps/api/public < media-AAAAmmdd-HHMM.tar.gz
+```
+
+### Alertas (recomendado)
+
+1. **Webhook** (opcional, sin dependencias): crea `/etc/default/turnero-watchdog` y
+   `/etc/default/turnero-backup` con la misma línea y reinicia los timers:
+
+   ```env
+   ALERT_WEBHOOK_URL=https://hooks.slack.com/services/XXX/YYY/ZZZ
+   ```
+
+   El cuerpo del POST es `{"text": "..."}` (Slack, Mattermost, Google Chat, Rocket.Chat).
+   En Telegram usa `https://api.telegram.org/bot<token>/sendMessage?chat_id=<id>` (el
+   mensaje va en el cuerpo JSON).
+
+2. **Monitor externo** (independiente de este servidor, para saber si el servidor
+   completo se cayó): UptimeRobot/Better Uptime gratis apuntando a
+   `https://turnero.serviredgane.cloud/api/health/ready` cada 5 minutos con alerta
+   por email. Si prefieres verlo en casa, Uptime Kuma en otro equipo de la red.
+
+> Cloudflare puede responder 502/52x cuando el origen no está; el monitor externo
+> debe considerar "caído" cualquier código >= 500 o un timeout.
+
+### Si algo amanece caído: orden de revisión
+
+```bash
+sudo docker compose -f deploy/docker-compose.yml ps          # ¿running/healthy?
+df -h                                                       # ¿disco lleno?
+sudo docker compose -f deploy/docker-compose.yml logs --tail=200 api
+curl -sS https://turnero.serviredgane.cloud/api/health/ready
+tail -n 100 /var/log/turnero-watchdog.log
+```
+
 ## Impresión de tickets
 
 El API no imprime por sí mismo: genera el ticket en ESC/POS y lo envía por una de estas vías.
@@ -258,7 +353,7 @@ pantalla configurada.
 
 | Síntoma | Causa probable | Solución |
 |---|---|---|
-| `502 Bad Gateway` en el navegador | El API está caído (revisa `logs api`). | Corregir el `.env` y re-desplegar. |
+| `502 Bad Gateway` en el navegador | El API está caído (revisa `logs api`). | Corregir el `.env` y re-desplegar. Si empezó justo después de un despliegue, nginx tenía la IP vieja: ya se corrige solo con `resolver 127.0.0.11` en `nginx.conf`. |
 | `SequelizeAccessDeniedError: Access denied for user ...` | Contraseña incorrecta o MySQL no autoriza esa IP. | Corregir `DB_PASS`; si persiste, autorizar al usuario desde la IP del servidor (`GRANT ... TO 'cliente'@'<ip>'`). |
 | `404`/`401` en rutas que existen | nginx resuelve al alias genérico `api`/`web` de **otro** contenedor. | Usar `turnero-api`/`turnero-web` (ya configurado). |
 | `port is already allocated` | Un puerto del host ya está ocupado (80 = NPM, 8080 = Jenkins). | No publicar puertos: el `web` va por la red interna. |

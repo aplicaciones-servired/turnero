@@ -38,6 +38,7 @@ RUN apt-get update \
       unzip \
       curl \
       ca-certificates \
+      default-mysql-client \
  && rm -rf /var/lib/apt/lists/*
 
 # Android SDK (platform-tools + platform 35 + build-tools 35) para `gradlew assembleDebug`.

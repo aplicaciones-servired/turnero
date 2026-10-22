@@ -1,0 +1,10 @@
+[Unit]
+Description=Turnero - watchdog (auto-recuperacion y limpieza)
+Documentation=file:///opt/turnero/deploy/README.md
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/turnero/deploy/watchdog.sh
+Nice=10
