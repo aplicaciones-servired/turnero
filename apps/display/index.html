@@ -7,15 +7,45 @@
         <meta name="mobile-web-app-capable" content="yes">
         <meta name="theme-color" content="#2196f3">
         <title>Visualizador V1</title>
-    <link rel="icon" href="/img/default.png">
-        <link rel="stylesheet" href="/css/framework7.bundle.min.css">
-        <link rel="stylesheet" href="/css/my-app.css">
+        <link rel="icon" href="/img/default.png">
+        <link rel="stylesheet" href="/css/framework7.bundle.min.css?v=20261022a">
+        <link rel="stylesheet" href="/css/my-app.css?v=20261022a">
         <script>
             window.__TURNERO__ = {
                 apiUrl: "%VITE_API_URL%",
                 mediaUrl: "%VITE_MEDIA_URL%",
                 screen: "%VITE_SCREEN%"
             };
+        </script>
+        <script>
+            /* Diagnostico: si la app no arranca, mostrar el error en pantalla
+               en vez de quedarse en blanco. */
+            window.__turneroErr = "";
+            window.addEventListener("error", function (e) {
+                window.__turneroErr = (e.message || "")
+                    + (e.filename ? " @ " + e.filename + ":" + (e.lineno || 0) : "");
+            });
+            window.addEventListener("unhandledrejection", function (e) {
+                try {
+                    window.__turneroErr = "Promise: " + (e.reason && (e.reason.message || e.reason));
+                } catch (x) { }
+            });
+            setTimeout(function () {
+                var el = document.getElementById("app");
+                if (!el || el.classList.contains("framework7-root")) return;
+                var d = document.createElement("div");
+                d.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;z-index:99999;"
+                    + "background:#111;color:#fff;font-family:sans-serif;padding:32px;overflow:auto";
+                var detalle = window.__turneroErr || "sin detalle (el JS no llego a ejecutarse)";
+                d.innerHTML = "<h2 style='color:#ff5555;margin:0 0 12px'>TURNERO: la pantalla no arranco</h2>"
+                    + "<p>El navegador no pudo iniciar la aplicacion.</p>"
+                    + "<pre style='white-space:pre-wrap;background:#1b1b1b;padding:12px;"
+                    + "border-radius:8px;color:#ffd479;font-size:15px'></pre>"
+                    + "<p style='color:#aaa;font-size:13px'></p>";
+                d.querySelector("pre").textContent = detalle;
+                d.querySelectorAll("p")[1].textContent = "Navegador: " + navigator.userAgent;
+                document.body.appendChild(d);
+            }, 8000);
         </script>
     </head>
     <body>
@@ -30,7 +60,7 @@
                                 <div class="divcontt" id="divcontt">
                                     <div class="row titulos">
                                         <div class="col-50" style="padding-left: 10px; text-align: center;">
-                                            <H1 style="font-weight: bold">MÓDULO</H1>
+                                            <H1 style="font-weight: bold">MÃ“DULO</H1>
                                         </div>
                                         <div class="col-5">
                                         </div>
@@ -171,7 +201,7 @@
             </div>
         </div>
 
-        <script type="text/javascript" src="/js/framework7.bundle.min.js"></script>
+        <script type="text/javascript" src="/js/framework7.bundle.min.js?v=20261022a"></script>
         <script>
             (function () {
                 var base = ("%VITE_API_URL%").replace(/\/api\/?$/, '');
@@ -180,7 +210,7 @@
                 document.head.appendChild(s);
             })();
         </script>
-        <script type="text/javascript" src="/js/my-app.js"></script>
-        <script type="text/javascript" src="/js/font-awesome.js"></script>
+        <script type="text/javascript" src="/js/my-app.js?v=20261022a"></script>
+        <script type="text/javascript" src="/js/font-awesome.js?v=20261022a"></script>
     </body>
 </html>
