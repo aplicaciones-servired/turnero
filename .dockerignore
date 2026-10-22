@@ -34,6 +34,10 @@ apps/display-android/build
 apps/display-android/local.properties
 apps/display-android/dist
 
+# APK precompilado del visualizador (semilla para /api/apk/download).
+# Se mantiene fuera de dist/ para no chocar con los excludes de arriba.
+!apps/display-android/apk/
+
 # Distribucion local de Gradle (el wrapper la descarga)
 tools
 
