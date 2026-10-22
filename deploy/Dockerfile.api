@@ -64,17 +64,8 @@ COPY --from=build /app/apps/api apps/api
 COPY apps/display-android apps/display-android
 RUN chmod +x apps/display-android/gradlew
 
-# APK "semilla": version precompilada que el entrypoint copia al volumen
-# 'apk-dist' para que /caja/ siempre sirva el APK mas reciente.
-COPY apps/display-android/apk/display-app.apk /app/apk-seed/turnero.apk
-
-# Entrypoint (refresca el APK y arranca la API).
-COPY deploy/entrypoint-api.sh /app/entrypoint-api.sh
-RUN chmod +x /app/entrypoint-api.sh
-
 # cwd = apps/api para que printer.service resuelva public/media/imagenes.
 WORKDIR /app/apps/api
 
 EXPOSE 3001
-ENTRYPOINT ["/app/entrypoint-api.sh"]
 CMD ["node", "dist/main.js"]

@@ -106,6 +106,9 @@ public class MainActivity extends Activity {
             public void onReceivedError(WebView view, int errorCode,
                                         String description, String failingUrl) {
                 marcarError();
+                mostrarError("Error " + errorCode
+                        + (description == null ? "" : " (" + description + ")")
+                        + "\nURL: " + (failingUrl == null ? targetUrl : failingUrl));
             }
 
             @Override
@@ -113,6 +116,9 @@ public class MainActivity extends Activity {
                                         WebResourceError error) {
                 if (request == null || request.isForMainFrame()) {
                     marcarError();
+                    mostrarError("No se pudo cargar la pantalla"
+                            + (error == null ? "" : " (" + error.getDescription() + ")")
+                            + "\nURL: " + (request == null ? targetUrl : request.getUrl()));
                 }
             }
         });
@@ -305,6 +311,36 @@ public class MainActivity extends Activity {
         cargaFallida = true;
         handler.removeCallbacks(arrancar);
         handler.postDelayed(arrancar, REINTENTO_MS);
+    }
+
+    /** Muestra el error en pantalla: sin esto la tele se queda en blanco. */
+    private void mostrarError(final String detalle) {
+        if (webView == null) {
+            return;
+        }
+        final String html = "<html><head>"
+                + "<meta name='viewport' content='width=device-width, initial-scale=1'>"
+                + "<style>body{background:#111;color:#fff;font-family:sans-serif;margin:0;"
+                + "padding:32px;word-break:break-all}"
+                + "h2{color:#ff5555;font-size:22px;margin:0 0 12px}"
+                + "pre{background:#1b1b1b;padding:12px;border-radius:8px;font-size:16px;"
+                + "white-space:pre-wrap;color:#ffd479}"
+                + "p{color:#aaa;font-size:15px}</style></head><body>"
+                + "<h2>TURNERO - no se pudo cargar la pantalla</h2>"
+                + "<pre>" + escapar(detalle) + "</pre>"
+                + "<p>Reintentando automaticamente...</p>"
+                + "</body></html>";
+        handler.post(new Runnable() {
+            @Override public void run() {
+                if (webView == null) return;
+                webView.loadDataWithBaseURL(null, html, "text/html", "utf-8", null);
+            }
+        });
+    }
+
+    private static String escapar(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private boolean hayRed() {
