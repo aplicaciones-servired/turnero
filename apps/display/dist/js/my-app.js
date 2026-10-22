@@ -553,11 +553,18 @@ function cargarConfig() {
             //
             if (data.length > 0) {
                 //
-                // Tamano de letra configurado en el admin (+15% para que se lea
-                // mejor en TV). Si no hay valor, manda el CSS.
+                // Tamano de letra configurado en el admin. En el navegador se
+                // agranda un 15%; en la APK se deja tal cual (el WebView de la
+                // TV ya lo muestra mas grande y se salia de la columna).
                 var letra = parseInt(data[0]['tamanoLetra'], 10);
                 if (letra > 0) {
-                    letra = Math.min(Math.round(letra * 1.15), 90);
+                    var enApk = !!(window.AndroidTTS && typeof window.AndroidTTS.speak === 'function');
+                    letra = Math.round(letra * (enApk ? 1.0 : 1.15));
+                    // Nunca mas de ~5.4% del alto de la pantalla.
+                    var tope = Math.round(window.innerHeight * 0.054);
+                    if (tope > 0 && letra > tope) {
+                        letra = tope;
+                    }
                     for (var i = 0; i < 5; i++) {
                         document.getElementById("modulo" + i).style.fontSize = letra + 'px';
                         document.getElementById("cliente" + i).style.fontSize = letra + 'px';
