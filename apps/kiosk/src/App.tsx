@@ -36,7 +36,6 @@ async function printLocally(b64: string): Promise<boolean> {
 
 export default function App() {
   const [expanded, setExpanded] = useState<ServiceTreeDTO | null>(null);
-  const [selected, setSelected] = useState<ServiceDTO | null>(null);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -63,31 +62,31 @@ export default function App() {
     resetTimer.current = window.setTimeout(() => {
       setResult(null);
       setExpanded(null);
-      setSelected(null);
       setError(null);
     }, 5000);
   };
 
   const pickService = (service: ServiceTreeDTO) => {
+    if (loading) return;
+    setError(null);
     if (service.children.length > 0) {
       setExpanded(service);
     } else {
-      setSelected(service);
+      void generate(service);
     }
   };
 
-  const confirm = async () => {
-    if (!selected) return;
+  const generate = async (service: ServiceDTO) => {
+    if (loading) return;
     setLoading(true);
     setError(null);
     try {
-      const { data } = await api.post<GenerateResponse>("/turns", { serviceId: selected.id });
+      const { data } = await api.post<GenerateResponse>("/turns", { serviceId: service.id });
       let printed = data.printed;
       if (data.ticket) {
         printed = await printLocally(data.ticket);
       }
       setResult({ ...data, printed });
-      setSelected(null);
       setExpanded(null);
       scheduleReset();
     } catch {
@@ -119,6 +118,7 @@ export default function App() {
       <header className="bg-slate-900 px-8 py-6 text-center text-white">
         <h1 className="text-3xl font-bold">{businessName}</h1>
         <p className="mt-1 text-lg text-slate-300">Seleccione el servicio que necesita</p>
+        {error && <p className="mt-2 text-lg text-red-300">{error}</p>}
       </header>
 
       <main className="flex flex-1 items-center justify-center p-8">
@@ -131,7 +131,8 @@ export default function App() {
             <button
               key={service.id}
               onClick={() => pickService(service)}
-              className="flex h-52 flex-col items-center justify-center rounded-3xl bg-white text-left shadow-lg ring-1 ring-slate-200 transition active:scale-95 hover:shadow-xl"
+              disabled={loading}
+              className="flex h-52 flex-col items-center justify-center rounded-3xl bg-white text-left shadow-lg ring-1 ring-slate-200 transition active:scale-95 hover:shadow-xl disabled:opacity-60"
             >
               <span
                 className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl text-2xl font-black text-white"
@@ -160,9 +161,10 @@ export default function App() {
                   key={child.id}
                   onClick={() => {
                     setExpanded(null);
-                    setSelected(child);
+                    void generate(child);
                   }}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left transition active:scale-95 hover:border-slate-300 hover:bg-white"
+                  disabled={loading}
+                  className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-left transition active:scale-95 hover:border-slate-300 hover:bg-white disabled:opacity-60"
                 >
                   <span
                     className="flex h-10 w-10 items-center justify-center rounded-xl text-sm font-black text-white"
@@ -180,35 +182,6 @@ export default function App() {
             >
               Volver
             </button>
-          </div>
-        </div>
-      )}
-
-      {selected && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-6">
-          <div className="w-full max-w-lg rounded-3xl bg-white p-8 text-center shadow-2xl">
-            <h2 className="text-2xl font-semibold text-slate-800">Confirma tu turno</h2>
-            <p className="mt-2 text-lg text-slate-600">{selected.name}</p>
-            {error && <p className="mt-4 text-red-600">{error}</p>}
-            <div className="mt-8 flex gap-4">
-              <button
-                onClick={() => {
-                  setSelected(null);
-                  setError(null);
-                }}
-                className="flex-1 rounded-2xl bg-slate-200 py-5 text-xl font-semibold text-slate-700 active:scale-95"
-                disabled={loading}
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={confirm}
-                className="flex-1 rounded-2xl bg-emerald-600 py-5 text-xl font-semibold text-white active:scale-95 disabled:opacity-60"
-                disabled={loading}
-              >
-                {loading ? "Generando..." : "Aceptar"}
-              </button>
-            </div>
           </div>
         </div>
       )}
