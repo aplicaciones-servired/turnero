@@ -323,6 +323,55 @@ Luego, en el **PC del kiosco**:
 > **Cada PC de kiosco necesita su propio agente local**; si un kiosco no lo tiene, el turno
 > se crea igual pero no se imprime ticket.
 
+#### Atril con Raspberry Pi (Linux)
+
+`PrintAgent.ps1` es solo para Windows (usa el spooler de Windows). En la Raspberry Pi se usa
+`deploy/print-agent/print-agent-linux.py`: escucha en `localhost:9110`, recibe el ticket en
+base64 y lo manda a la impresora por CUPS con `lp -o raw` (o directo a `/dev/usb/lp0` como
+respaldo). No necesita dependencias fuera de Python 3 y CUPS.
+
+En la Raspberry Pi:
+
+```bash
+# 1. Nombre exacto de la impresora en CUPS (ej. SAT38TUSE)
+lpstat -p
+
+# 2. Copiar el agente y su servicio
+sudo mkdir -p /opt/turnero/print-agent
+sudo cp deploy/print-agent/print-agent-linux.py /opt/turnero/print-agent/
+sudo install -m 644 deploy/print-agent/turnero-print-agent.service /etc/systemd/system/
+
+# 3. Impresora (y usuario, si no es `pi`)
+sudo tee /etc/default/turnero-print-agent >/dev/null <<'EOF'
+PRINTER_NAME=SAT38TUSE
+PORT=9110
+EOF
+
+# 4. Arrancar
+sudo systemctl daemon-reload
+sudo systemctl enable --now turnero-print-agent
+curl http://localhost:9110/health
+# -> {"ok": true, "printer": "SAT38TUSE"}
+```
+
+Probar la impresora sin pasar por el kiosco:
+
+```bash
+printf 'PRUEBA DE IMPRESION\n\n\n\n' > /tmp/prueba.txt
+lp -d SAT38TUSE -o raw /tmp/prueba.txt
+lpstat -o SAT38TUSE        # si queda un trabajo atascado: cancel -a SAT38TUSE
+```
+
+Problemas típicos en el atril:
+
+| Síntoma | Causa | Solución |
+|---|---|---|
+| `curl localhost:9110/health` no responde | El servicio no arrancó. | `journalctl -u turnero-print-agent -n 50` |
+| Imprime pero sale basura/cortado | La cola CUPS aplica filtros. | El agente ya usa `-o raw`; si persiste, usa `PRINTER_DEVICE=/dev/usb/lp0`. |
+| La impresora aparece **deshabilitada** en `lpstat -p` | Cola pausada. | `sudo cupsenable SAT38TUSE && sudo cupsaccept SAT38TUSE` |
+| El turno se crea pero no imprime | El navegador no llega al agente. | Abre la consola del kiosco: debe fallar el `POST http://localhost:9110/print`; revisa `PRINT_AGENT_URL` y que el agente escuche (IPv4/IPv6). |
+
+
 ### Impresora USB conectada al propio servidor
 
 Alternativa si la impresora está enchufada al servidor. El dispositivo hay que exponerlo en

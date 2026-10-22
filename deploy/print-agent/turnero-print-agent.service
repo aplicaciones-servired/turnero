@@ -1,0 +1,19 @@
+[Unit]
+Description=Turnero - agente de impresion local (kiosco)
+Documentation=file:///opt/turnero/deploy/README.md
+After=cups.service network.target
+Wants=cups.service
+
+[Service]
+Type=simple
+# Ajusta el usuario si no es una Raspberry Pi OS (por defecto `pi`).
+User=pi
+# Permite escribir directo en /dev/usb/lpX si CUPS falla.
+SupplementaryGroups=lp
+EnvironmentFile=-/etc/default/turnero-print-agent
+ExecStart=/usr/bin/python3 /opt/turnero/print-agent/print-agent-linux.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
