@@ -578,40 +578,55 @@ function voz(text, volumen) {
     if (vol > 1) vol = 1;
     if (vol < 0.1) vol = 0.1;
     //
-    // 1) TTS nativo: dentro del APK MainActivity expone window.AndroidTTS.
-    if (window.AndroidTTS) {
+    // En Android WebView lo mas fiable es el MP3 del servidor (voces mas naturales).
+    // El TTS nativo del dispositivo suele venir con motor mudo o sin voces es.
+    var tl = (typeof CFG !== 'undefined' && CFG.ttsLang) ? CFG.ttsLang : 'es';
+    var base = (typeof apiBase !== 'undefined') ? apiBase : ((typeof CFG !== 'undefined' && CFG.apiUrl) ? CFG.apiUrl : 'http://localhost:3001/api');
+    base = base.replace(/\/+$/, '');
+    var root = base.replace(/\/api\/?$/, '');
+    var urlTts = root + '/api/tts?tl=' + encodeURIComponent(tl) + '&text=' + encodeURIComponent(text);
+    //
+    // 1) MP3 desde el servidor (nativo si la APK lo soporta, si no via Audio())
+    if (window.AndroidTTS && typeof window.AndroidTTS.playAudio === 'function') {
         try {
-            // Si el puente dice que NO hay motor de voz listo, usar directamente el servidor
-            if (typeof window.AndroidTTS.disponible === 'function') {
-                if (!window.AndroidTTS.disponible()) {
-                    throw new Error('tts no disponible');
-                }
-            }
-            //
-            window.AndroidTTS.speak('v' + Date.now() + '-' + Math.random(), text, 0.9, 1);
+            window.AndroidTTS.playAudio(urlTts, vol);
             return;
         } catch (e) {
-            // Si falla o no está disponible, usar TTS del servidor.
         }
     }
-    //
-    // 2) MP3 desde el servidor (voces mas naturales) - funciona en Android WebView
     try {
-        var tl = (typeof CFG !== 'undefined' && CFG.ttsLang) ? CFG.ttsLang : 'es';
-        var base = (typeof apiBase !== 'undefined') ? apiBase : ((typeof CFG !== 'undefined' && CFG.apiUrl) ? CFG.apiUrl : 'http://localhost:3001/api');
-        base = base.replace(/\/+$/, '');
-        var root = base.replace(/\/api\/?$/, '');
-        var urlTts = root + '/api/tts?tl=' + encodeURIComponent(tl) + '&text=' + encodeURIComponent(text);
         var a = new Audio();
         a.volume = vol;
         a.src = urlTts;
         var p = a.play();
         if (p && typeof p.catch === 'function') {
-            p.catch(function () {});
+            p.catch(function () {
+                // Si el autoplay falla, reintento con el TTS nativo
+                if (window.AndroidTTS && typeof window.AndroidTTS.speak === 'function') {
+                    try {
+                        if (typeof window.AndroidTTS.disponible !== 'function' || window.AndroidTTS.disponible()) {
+                            window.AndroidTTS.speak('v' + Date.now() + '-' + Math.random(), text, 0.9, 1);
+                        }
+                    } catch (e2) {
+                    }
+                }
+            });
         }
         return;
     } catch (e) {
         // fallback
+    }
+    //
+    // 2) TTS nativo: dentro del APK MainActivity expone window.AndroidTTS.
+    if (window.AndroidTTS && typeof window.AndroidTTS.speak === 'function') {
+        try {
+            if (typeof window.AndroidTTS.disponible !== 'function' || window.AndroidTTS.disponible()) {
+                window.AndroidTTS.speak('v' + Date.now() + '-' + Math.random(), text, 0.9, 1);
+                return;
+            }
+        } catch (e) {
+            // Si el puente falla, se intenta con speechSynthesis.
+        }
     }
     //
     // 3) Web Speech API (navegadores de escritorio)

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.media.ToneGenerator;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
@@ -210,54 +211,43 @@ public class MainActivity extends Activity {
         /** Reproduce un MP3 desde una URL (mas fiable que Audio() en Android WebView). */
         @JavascriptInterface
         public void playAudio(final String url, final double volume) {
-            final String u = url == null ? "" : url;
+            final String u = (url == null) ? "" : url.trim();
+            if (u.isEmpty()) return;
             handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    if (u.isEmpty()) {
-                        return;
-                    }
+                @Override public void run() {
                     try {
-                        final android.media.MediaPlayer mp = new android.media.MediaPlayer();
-                        mp.setAudioStreamType(android.media.AudioManager.STREAM_MUSIC);
+                        final MediaPlayer mp = new MediaPlayer();
+                        mp.setAudioStreamType(AudioManager.STREAM_MUSIC);
                         try {
                             float v = (float) Math.max(0.1, Math.min(1.0, volume));
                             mp.setVolume(v, v);
-                        } catch (Exception ignored) {
-                        }
+                        } catch (Exception ignored) { }
                         mp.setDataSource(u);
-                        mp.setOnPreparedListener(new android.media.MediaPlayer.OnPreparedListener() {
-                            @Override
-                            public void onPrepared(android.media.MediaPlayer mediaPlayer) {
-                                mediaPlayer.start();
+                        mp.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                            @Override public void onPrepared(MediaPlayer mp2) { mp2.start(); }
+                        });
+                        mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                            @Override public void onCompletion(MediaPlayer mp2) {
+                                try { mp2.release(); } catch (Exception ignored) { }
                             }
                         });
-                        mp.setOnCompletionListener(new android.media.MediaPlayer.OnCompletionListener() {
-                            @Override
-                            public void onCompletion(android.media.MediaPlayer mediaPlayer) {
-                                try {
-                                    mediaPlayer.release();
-                                } catch (Exception ignored) {
-                                }
-                            }
-                        });
-                        mp.setOnErrorListener(new android.media.MediaPlayer.OnErrorListener() {
-                            @Override
-                            public boolean onError(android.media.MediaPlayer mediaPlayer, int what, int extra) {
-                                try {
-                                    mediaPlayer.release();
-                                } catch (Exception ignored) {
-                                }
+                        mp.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                            @Override public boolean onError(MediaPlayer mp2, int what, int extra) {
+                                try { mp2.release(); } catch (Exception ignored) { }
                                 return true;
                             }
                         });
                         mp.prepareAsync();
-                    } catch (Exception e) {
-                        // Si falla, dejamos que el JS intente con Audio().
+                    } catch (Exception ignored) {
+                        // Si falla, el JS hace fallback a Audio() o al TTS nativo.
                     }
                 }
             });
         }
+
+        /** Dos notas ascendentes: el aviso suave previo a la voz. */
+        @JavascriptInterface
+        public void chime() {
             handler.post(new Runnable() {
                 @Override public void run() {
                     try {
