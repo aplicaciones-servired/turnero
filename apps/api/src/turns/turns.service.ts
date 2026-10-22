@@ -1,11 +1,12 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from "@nestjs/common";
 import { InjectConnection, InjectModel } from "@nestjs/sequelize";
 import { ConfigService } from "@nestjs/config";
-import { Op, Sequelize, WhereOptions } from "sequelize";
+import { Op, QueryTypes, Sequelize, WhereOptions } from "sequelize";
 import type {
   AuthUser,
   CallTurnPayload,
@@ -51,6 +52,7 @@ export interface TransferTurnInput {
 
 @Injectable()
 export class TurnsService {
+  private readonly logger = new Logger(TurnsService.name);
   private readonly estadoEspera: string;
   private readonly estadoLlamando: string;
   private readonly estadoAplazado = "Aplazado";
@@ -59,6 +61,11 @@ export class TurnsService {
   private readonly estadoCancelado: string;
   private readonly sedeId: number;
   private readonly empId: number;
+  //
+  // Ultimo dia (Lima) en que ya se verifico el reinicio de numeracion por
+  // servicio. Evita consultar el historial en cada turno: solo la primera vez
+  // que se genera un turno de ese servicio en el dia.
+  private readonly diaTurnos = new Map<number, string>();
 
   constructor(
     @InjectModel(Servicio) private readonly servicioModel: typeof Servicio,
@@ -86,6 +93,49 @@ export class TurnsService {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // REINICIO DIARIO DE LA NUMERACION
+  // ─────────────────────────────────────────────────────────────
+
+  // Lima es UTC-5 todo el ano (sin horario de verano), igual que el `timezone`
+  // configurado en la conexion a MySQL.
+  private diaLima(ahora = new Date()): string {
+    return new Date(ahora.getTime() - 5 * 3600 * 1000).toISOString().slice(0, 10);
+  }
+
+  /** Instante absoluto de las 00:00 de hoy en Lima (para filtrar por fecha). */
+  private inicioDiaLima(ahora = new Date()): Date {
+    const lima = new Date(ahora.getTime() - 5 * 3600 * 1000);
+    return new Date(
+      Date.UTC(lima.getUTCFullYear(), lima.getUTCMonth(), lima.getUTCDate(), 5, 0, 0, 0)
+    );
+  }
+
+  /**
+   * True si el servicio tiene que reiniciar su contador: su ultimo turno
+   * (tabla `auditoria`) se genero en un dia anterior. Se resuelve una sola vez
+   * por servicio y por dia, asi no se consulta el historial en cada turno.
+   */
+  private async reiniciarNumeracion(idServicio: number, hoy: string): Promise<boolean> {
+    if (this.diaTurnos.get(idServicio) === hoy) return false;
+    try {
+      const filas = await this.sequelize.query<{ dia: string }>(
+        "SELECT DATE_FORMAT(FechaLlegada, '%Y-%m-%d') AS dia FROM auditoria WHERE IdServicio = :id ORDER BY IdAuditoria DESC LIMIT 1",
+        { replacements: { id: idServicio }, type: QueryTypes.SELECT }
+      );
+      const ultimo = filas[0]?.dia ?? null;
+      return !!ultimo && ultimo < hoy;
+    } catch (err) {
+      // Si el historial no responde se sigue con la numeracion actual: mejor
+      // un turno 101 que un kiosco sin entregar turnos.
+      this.diaTurnos.set(idServicio, hoy);
+      this.logger.warn(
+        `No se pudo verificar el reinicio diario del servicio ${idServicio}: ${(err as Error).message}`
+      );
+      return false;
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // KIOSCO
   // ─────────────────────────────────────────────────────────────
 
@@ -94,6 +144,8 @@ export class TurnsService {
     serviceId: string
   ): Promise<{ turn: TurnDTO; printed: boolean; ticket?: string }> {
     const idServicio = Number(serviceId);
+    const hoy = this.diaLima();
+    const reiniciar = await this.reiniciarNumeracion(idServicio, hoy);
     const transaction = await this.sequelize.transaction();
     let tablaId!: number;
     try {
@@ -108,6 +160,27 @@ export class TurnsService {
 
       const min = servicio.Cont_min ?? 0;
       const max = servicio.Cont_max ?? 999;
+      if (reiniciar) {
+        // Primer turno del dia de este servicio: vuelve a Cont_min (01) y saca
+        // de la cola los pendientes de dias anteriores, para que no queden dos
+        // F-001 visibles al mismo tiempo.
+        servicio.Secuencia = (servicio.Cont_min ?? 1) - 1;
+        const [cancelados] = await this.tablaModel.update(
+          { Estado: this.estadoCancelado },
+          {
+            where: {
+              Estado: this.estadoEspera,
+              FechaLlegada: { [Op.lt]: this.inicioDiaLima() },
+            },
+            transaction,
+          }
+        );
+        if (cancelados > 0) {
+          this.logger.log(
+            `Reinicio diario: ${cancelados} turno(s) pendiente(s) de dias anteriores cancelados`
+          );
+        }
+      }
       let next = (servicio.Secuencia ?? 0) + 1;
       if (next > max) next = min;
       servicio.Secuencia = next;
@@ -180,9 +253,13 @@ export class TurnsService {
 
       await transaction.commit();
     } catch (err) {
+      // Si la transaccion falla, la proxima vez se vuelve a evaluar el reinicio.
+      this.diaTurnos.delete(idServicio);
       await transaction.rollback();
       throw err;
     }
+
+    this.diaTurnos.set(idServicio, hoy);
 
     const tabla = await this.tablaModel.findByPk(tablaId);
     const dto = await this.toDto(tabla!);
