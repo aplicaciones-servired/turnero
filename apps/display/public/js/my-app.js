@@ -589,14 +589,13 @@ function voz(text, volumen) {
     if (vol > 1) vol = 1;
     if (vol < 0.1) vol = 0.1;
     //
-    // En Android WebView lo mas fiable es el MP3 del servidor (voces mas naturales).
-    // El TTS nativo del dispositivo suele venir con motor mudo o sin voces es.
+    // MP3 generado por el servidor (voz natural, sin depender del motor TTS
+    // del dispositivo, que en muchos tvbox viene mudo o sin voces en espanol).
     var tl = (typeof CFG !== 'undefined' && CFG.ttsLang) ? CFG.ttsLang : 'es';
     var base = (typeof apiBase !== 'undefined') ? apiBase : ((typeof CFG !== 'undefined' && CFG.apiUrl) ? CFG.apiUrl : 'http://localhost:3001/api');
     base = base.replace(/\/+$/, '');
     //
-    // La URL tiene que ser ABSOLUTA: el MediaPlayer de la APK no entiende
-    // rutas relativas como "/api/tts" (por eso no sonaba en la TV).
+    // URL ABSOLUTA: el MediaPlayer de la APK no entiende rutas relativas.
     var root = base.replace(/\/api\/?$/, '');
     if (!root) {
         root = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
@@ -604,20 +603,6 @@ function voz(text, volumen) {
         root = ((typeof location !== 'undefined' && location.origin) ? location.origin : '') + root;
     }
     var urlTts = root + '/api/tts?tl=' + encodeURIComponent(tl) + '&text=' + encodeURIComponent(text);
-    //
-    function conAudioWeb() {
-        try {
-            var a = new Audio();
-            a.volume = vol;
-            a.src = urlTts;
-            var p = a.play();
-            if (p && typeof p.catch === 'function') {
-                p.catch(function () { conTtsNativo(); });
-            }
-        } catch (e) {
-            conTtsNativo();
-        }
-    }
     //
     function conTtsNativo() {
         if (window.AndroidTTS && typeof window.AndroidTTS.speak === 'function') {
@@ -644,18 +629,68 @@ function voz(text, volumen) {
         }
     }
     //
-    // 1) MP3 desde el servidor por el reproductor nativo de la APK
-    if (window.AndroidTTS && typeof window.AndroidTTS.playAudio === 'function') {
-        window.__turneroAudioError = conAudioWeb;
+    function conPlayNativo() {
+        if (window.AndroidTTS && typeof window.AndroidTTS.playAudio === 'function') {
+            window.__turneroAudioError = conTtsNativo;
+            try {
+                window.AndroidTTS.playAudio(urlTts, vol);
+                return;
+            } catch (e) {
+            }
+        }
+        conTtsNativo();
+    }
+    //
+    // El WebView usa su propia pila de red/TLS (la misma que carga la pagina),
+    // que en tvbox viejos si funciona; el MediaPlayer nativo a veces no logra
+    // el HTTPS. Por eso se intenta primero por Audio() y luego el nativo.
+    function conAudioWeb(alFallar) {
+        var a;
+        var terminado = false;
+        var timer = null;
         try {
-            window.AndroidTTS.playAudio(urlTts, vol);
-            return;
+            a = new Audio();
         } catch (e) {
+            alFallar();
+            return;
+        }
+        //
+        function fallar() {
+            if (terminado) return;
+            terminado = true;
+            if (timer) clearTimeout(timer);
+            try { a.pause(); } catch (e) { }
+            try { a.src = ''; } catch (e) { }
+            alFallar();
+        }
+        //
+        try {
+            a.volume = vol;
+            a.addEventListener('playing', function () {
+                terminado = true;
+                if (timer) clearTimeout(timer);
+            });
+            a.addEventListener('abort', fallar);
+            a.addEventListener('error', fallar);
+            a.src = urlTts;
+            // Si en 2.5s no arranco, se prueba el reproductor nativo.
+            timer = setTimeout(function () {
+                if (terminado) return;
+                try { a.pause(); } catch (e) { }
+                try { a.src = ''; } catch (e) { }
+                alFallar();
+            }, 2500);
+            var p = a.play();
+            if (p && typeof p.catch === 'function') {
+                p.catch(fallar);
+            }
+        } catch (e) {
+            fallar();
         }
     }
     //
-    // 2) MP3 desde el servidor con Audio() del navegador
-    conAudioWeb();
+    // 1) MP3 del servidor con el motor del WebView (pc, APK y tvbox).
+    conAudioWeb(conPlayNativo);
 }
 
 //
