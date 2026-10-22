@@ -63,7 +63,12 @@ function iniciar() {
         cargarVideos(true);
     };
     //
-    if (localStorage.visualizador === undefined) {
+    // Pantalla forzada por URL (?screen=4) tiene prioridad; si no, la guardada.
+    var urlScreen = parseInt((location.search.match(/[?&]screen=(\d+)/) || [])[1], 10);
+    if (urlScreen > 0) {
+        visualizador = urlScreen;
+        localStorage.visualizador = visualizador;
+    } else if (localStorage.visualizador === undefined) {
         //
         visualizador = defaultScreen;
         localStorage.visualizador = visualizador;

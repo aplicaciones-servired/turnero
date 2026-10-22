@@ -8,8 +8,8 @@
         <meta name="theme-color" content="#2196f3">
         <title>Visualizador V1</title>
         <link rel="icon" href="/pantalla/img/default.png">
-        <link rel="stylesheet" href="/pantalla/css/framework7.bundle.min.css?v=20261022b">
-        <link rel="stylesheet" href="/pantalla/css/my-app.css?v=20261022b">
+        <link rel="stylesheet" href="/pantalla/css/framework7.bundle.min.css?v=20261022c">
+        <link rel="stylesheet" href="/pantalla/css/my-app.css?v=20261022c">
         <script>
             window.__TURNERO__ = {
                 apiUrl: "http://localhost:3001/api",
@@ -156,11 +156,12 @@
                                     </div>
                                 </div>
                                 <div id="visualizarTurno" style="
-                                        position: absolute;
-                                        left: 10%; 
-                                        top: 10%;
-                                        width: 80%;
-                                        height: 80%;
+                                        position: fixed;
+                                        left: 0;
+                                        top: 0;
+                                        width: 100vw;
+                                        height: 100vh;
+                                        z-index: 50;
                                         display: flex;
                                         justify-content: center;                                            
                                         align-items: center;">
@@ -201,7 +202,7 @@
             </div>
         </div>
 
-        <script type="text/javascript" src="/pantalla/js/framework7.bundle.min.js?v=20261022b"></script>
+        <script type="text/javascript" src="/pantalla/js/framework7.bundle.min.js?v=20261022c"></script>
         <script>
             (function () {
                 var base = ("http://localhost:3001/api").replace(/\/api\/?$/, '');
@@ -210,7 +211,7 @@
                 document.head.appendChild(s);
             })();
         </script>
-        <script type="text/javascript" src="/pantalla/js/my-app.js?v=20261022b"></script>
-        <script type="text/javascript" src="/pantalla/js/font-awesome.js?v=20261022b"></script>
+        <script type="text/javascript" src="/pantalla/js/my-app.js?v=20261022c"></script>
+        <script type="text/javascript" src="/pantalla/js/font-awesome.js?v=20261022c"></script>
     </body>
 </html>

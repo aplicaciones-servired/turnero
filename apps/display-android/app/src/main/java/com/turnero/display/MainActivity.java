@@ -78,6 +78,9 @@ public class MainActivity extends Activity {
         s.setDatabaseEnabled(true);
         s.setLoadWithOverviewMode(true);
         s.setUseWideViewPort(true);
+        // Fija el zoom de texto al 100%: si la TV tiene la fuente del sistema
+        // agrandada, el WebView agrandaba todo el HTML y descuadraba la pantalla.
+        s.setTextZoom(100);
         s.setCacheMode(WebSettings.LOAD_DEFAULT);
         s.setMediaPlaybackRequiresUserGesture(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {

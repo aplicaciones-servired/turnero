@@ -1,3 +1,11 @@
+/* Evita que el WebView de Android (TV) agrande el texto por su cuenta
+   ("font boosting") cuando cambia el contenido: eso descolocaba la pantalla. */
+html {
+    -webkit-text-size-adjust: none;
+    -moz-text-size-adjust: none;
+    text-size-adjust: none;
+}
+
 .page-content{
     background-image: url("../img/Fondo Sistema de turnos-Azul.jpg");
     background-size: 100%;
@@ -106,11 +114,12 @@
 }
 
 #visualizarTurno {
-    position: absolute;
-    left: 10%;
-    top: 10%;
-    width: 80%;
-    height: 80%;
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 50;
     display: flex;
     justify-content: center;
     align-items: center;
