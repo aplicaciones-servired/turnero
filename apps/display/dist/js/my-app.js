@@ -594,67 +594,68 @@ function voz(text, volumen) {
     var tl = (typeof CFG !== 'undefined' && CFG.ttsLang) ? CFG.ttsLang : 'es';
     var base = (typeof apiBase !== 'undefined') ? apiBase : ((typeof CFG !== 'undefined' && CFG.apiUrl) ? CFG.apiUrl : 'http://localhost:3001/api');
     base = base.replace(/\/+$/, '');
+    //
+    // La URL tiene que ser ABSOLUTA: el MediaPlayer de la APK no entiende
+    // rutas relativas como "/api/tts" (por eso no sonaba en la TV).
     var root = base.replace(/\/api\/?$/, '');
+    if (!root) {
+        root = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
+    } else if (!/^https?:\/\//i.test(root)) {
+        root = ((typeof location !== 'undefined' && location.origin) ? location.origin : '') + root;
+    }
     var urlTts = root + '/api/tts?tl=' + encodeURIComponent(tl) + '&text=' + encodeURIComponent(text);
     //
-    // 1) MP3 desde el servidor (nativo si la APK lo soporta, si no via Audio())
+    function conAudioWeb() {
+        try {
+            var a = new Audio();
+            a.volume = vol;
+            a.src = urlTts;
+            var p = a.play();
+            if (p && typeof p.catch === 'function') {
+                p.catch(function () { conTtsNativo(); });
+            }
+        } catch (e) {
+            conTtsNativo();
+        }
+    }
+    //
+    function conTtsNativo() {
+        if (window.AndroidTTS && typeof window.AndroidTTS.speak === 'function') {
+            try {
+                if (typeof window.AndroidTTS.disponible !== 'function' || window.AndroidTTS.disponible()) {
+                    window.AndroidTTS.speak('v' + Date.now() + '-' + Math.random(), text, 0.9, 1);
+                    return;
+                }
+            } catch (e) {
+            }
+        }
+        try {
+            if (typeof speechSynthesis === 'undefined' || typeof SpeechSynthesisUtterance === 'undefined') {
+                return;
+            }
+            var u2 = new SpeechSynthesisUtterance();
+            u2.text = text;
+            u2.lang = 'es-ES';
+            u2.volume = vol;
+            speechSynthesis.cancel();
+            speechSynthesis.speak(u2);
+        } catch (e) {
+            console.warn("voz no disponible", e);
+        }
+    }
+    //
+    // 1) MP3 desde el servidor por el reproductor nativo de la APK
     if (window.AndroidTTS && typeof window.AndroidTTS.playAudio === 'function') {
+        window.__turneroAudioError = conAudioWeb;
         try {
             window.AndroidTTS.playAudio(urlTts, vol);
             return;
         } catch (e) {
         }
     }
-    try {
-        var a = new Audio();
-        a.volume = vol;
-        a.src = urlTts;
-        var p = a.play();
-        if (p && typeof p.catch === 'function') {
-            p.catch(function () {
-                // Si el autoplay falla, reintento con el TTS nativo
-                if (window.AndroidTTS && typeof window.AndroidTTS.speak === 'function') {
-                    try {
-                        if (typeof window.AndroidTTS.disponible !== 'function' || window.AndroidTTS.disponible()) {
-                            window.AndroidTTS.speak('v' + Date.now() + '-' + Math.random(), text, 0.9, 1);
-                        }
-                    } catch (e2) {
-                    }
-                }
-            });
-        }
-        return;
-    } catch (e) {
-        // fallback
-    }
     //
-    // 2) TTS nativo: dentro del APK MainActivity expone window.AndroidTTS.
-    if (window.AndroidTTS && typeof window.AndroidTTS.speak === 'function') {
-        try {
-            if (typeof window.AndroidTTS.disponible !== 'function' || window.AndroidTTS.disponible()) {
-                window.AndroidTTS.speak('v' + Date.now() + '-' + Math.random(), text, 0.9, 1);
-                return;
-            }
-        } catch (e) {
-            // Si el puente falla, se intenta con speechSynthesis.
-        }
-    }
-    //
-    // 3) Web Speech API (navegadores de escritorio)
-    try {
-        if (typeof speechSynthesis === 'undefined' || typeof SpeechSynthesisUtterance === 'undefined') {
-            return;
-        }
-        //
-        var u2 = new SpeechSynthesisUtterance();
-        u2.text = text;
-        u2.lang = 'es-ES';
-        u2.volume = vol;
-        speechSynthesis.cancel();
-        speechSynthesis.speak(u2);
-    } catch (e) {
-        console.warn("voz no disponible", e);
-    }
+    // 2) MP3 desde el servidor con Audio() del navegador
+    conAudioWeb();
 }
 
 //

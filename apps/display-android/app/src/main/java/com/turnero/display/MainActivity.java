@@ -243,13 +243,26 @@ public class MainActivity extends Activity {
                         mp.setOnErrorListener(new MediaPlayer.OnErrorListener() {
                             @Override public boolean onError(MediaPlayer mp2, int what, int extra) {
                                 try { mp2.release(); } catch (Exception ignored) { }
+                                avisarAudioError();
                                 return true;
                             }
                         });
                         mp.prepareAsync();
-                    } catch (Exception ignored) {
-                        // Si falla, el JS hace fallback a Audio() o al TTS nativo.
+                    } catch (Exception e) {
+                        avisarAudioError();
                     }
+                }
+            });
+        }
+
+        /** Avisa a la pagina para que intente otra forma de reproducir. */
+        private void avisarAudioError() {
+            final WebView wv = webView;
+            if (wv == null) return;
+            final String js = "window.__turneroAudioError && window.__turneroAudioError();";
+            handler.post(new Runnable() {
+                @Override public void run() {
+                    try { wv.evaluateJavascript(js, null); } catch (Exception ignored) { }
                 }
             });
         }
