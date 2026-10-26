@@ -16,6 +16,7 @@ import { RealtimeModule } from "./realtime/realtime.module";
 import { VisualizerModule } from "./visualizer/visualizer.module";
 import { ModulosModule } from "./modulos/modulos.module";
 import { TtsModule } from "./tts/tts.module";
+import { ReportsModule } from "./reports/reports.module";
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { TtsModule } from "./tts/tts.module";
     SettingsModule,
     ModulosModule,
     TtsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

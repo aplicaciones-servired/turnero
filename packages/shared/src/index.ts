@@ -96,6 +96,191 @@ export interface ClientToServerEvents {
   "display:subscribe": () => void;
 }
 
+export interface ReportRange {
+  from: string;
+  to: string;
+}
+
+export type ReportTurnStatus =
+  | "all"
+  | "finished"
+  | "absent"
+  | "transferred"
+  | "waiting"
+  | "cancelled";
+
+export interface ReportSummary {
+  range: ReportRange;
+  totals: {
+    tickets: number;
+    called: number;
+    finished: number;
+    absent: number;
+    transferred: number;
+    cancelled: number;
+    waitingNow: number;
+    deferredNow: number;
+  };
+  averages: {
+    waitSec: number | null;
+    attentionSec: number | null;
+    totalSec: number | null;
+  };
+  rates: {
+    absent: number;
+    finished: number;
+  };
+  byHour: Array<{ hour: number; tickets: number; finished: number; absent: number }>;
+  byDay: Array<{ date: string; tickets: number; finished: number; absent: number }>;
+  byService: Array<{
+    serviceId: number | null;
+    name: string;
+    tickets: number;
+    finished: number;
+    absent: number;
+    transferred: number;
+    waitAvgSec: number | null;
+    attentionAvgSec: number | null;
+  }>;
+}
+
+export interface ReportTurnRow {
+  id: number;
+  arrivedAt: string | null;
+  calledAt: string | null;
+  finishedAt: string | null;
+  turn: string | null;
+  serviceId: number | null;
+  serviceName: string | null;
+  userId: number | null;
+  userName: string | null;
+  status: string;
+  observation: string | null;
+  document: string | null;
+  customer: string | null;
+  calls: number;
+  waitSec: number | null;
+  attentionSec: number | null;
+  totalSec: number | null;
+}
+
+export interface ReportTurnsPage {
+  range: ReportRange;
+  rows: ReportTurnRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface ReportTimeRow {
+  key: number | null;
+  name: string;
+  called: number;
+  finished: number;
+  absent: number;
+  waitAvgSec: number | null;
+  waitMedianSec: number | null;
+  waitP90Sec: number | null;
+  attentionAvgSec: number | null;
+  attentionMedianSec: number | null;
+  attentionP90Sec: number | null;
+}
+
+export interface ReportTimes {
+  range: ReportRange;
+  byService: ReportTimeRow[];
+  byAgent: ReportTimeRow[];
+}
+
+export interface ReportAbsenteeismRow {
+  key: number | null;
+  name: string;
+  total: number;
+  absent: number;
+  rate: number;
+}
+
+export interface ReportAbsenteeism {
+  range: ReportRange;
+  total: number;
+  absent: number;
+  rate: number;
+  byService: ReportAbsenteeismRow[];
+  byAgent: ReportAbsenteeismRow[];
+  byHour: Array<{ hour: number; total: number; absent: number; rate: number }>;
+}
+
+export interface ReportAgentRow {
+  userId: number;
+  name: string;
+  calls: number;
+  finished: number;
+  absent: number;
+  transferred: number;
+  waitAvgSec: number | null;
+  attentionAvgSec: number | null;
+  firstCallAt: string | null;
+  lastCallAt: string | null;
+}
+
+export interface ReportAgents {
+  range: ReportRange;
+  rows: ReportAgentRow[];
+}
+
+export interface ReportCalls {
+  range: ReportRange;
+  total: number;
+  rows: ReportAgentRow[];
+  byDay: Array<{ date: string; calls: number }>;
+}
+
+export interface ReportDemand {
+  range: ReportRange;
+  total: number;
+  max: number;
+  cells: Array<{ weekday: number; hour: number; count: number }>;
+}
+
+export interface ReportRatingValue {
+  value: string;
+  count: number;
+  pct: number;
+}
+
+export interface ReportRatingAgent {
+  userId: number;
+  name: string;
+  total: number;
+  values: ReportRatingValue[];
+}
+
+export interface ReportRatingQuestion {
+  questionId: number | null;
+  question: string;
+  total: number;
+  values: ReportRatingValue[];
+}
+
+export interface ReportRatings {
+  range: ReportRange;
+  total: number;
+  byValue: ReportRatingValue[];
+  byAgent: ReportRatingAgent[];
+  byQuestion: ReportRatingQuestion[];
+  byDay: Array<{ date: string; total: number }>;
+}
+
+export type ReportExportType =
+  | "summary"
+  | "turns"
+  | "times"
+  | "absenteeism"
+  | "agents"
+  | "calls"
+  | "demand"
+  | "ratings";
+
 /** Convierte un codigo de turno (ej "A012") en texto hablado calmado */
 export function buildAnnouncement(
   code: string,

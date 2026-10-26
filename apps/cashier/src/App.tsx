@@ -8,12 +8,22 @@ import { AdminServices } from "./components/AdminServices";
 import { AdminSettings } from "./components/AdminSettings";
 import { AdminDisplay } from "./components/AdminDisplay";
 import { AdminUsers } from "./components/AdminUsers";
+import { AdminReports } from "./components/AdminReports";
 
-type Tab = "call" | "turns" | "services" | "settings" | "display" | "users";
+type Tab =
+  | "call"
+  | "turns"
+  | "reports"
+  | "services"
+  | "settings"
+  | "display"
+  | "users";
 
 const ICONS: Record<Tab, string> = {
   call: "M11.3 1.046A1 1 0 0 1 12 2v5h4a1 1 0 0 1 .82 1.573l-7 10A1 1 0 0 1 8 18v-5H4a1 1 0 0 1-.82-1.573l7-10Z",
   turns: "M3 4a1 1 0 0 1 1-1h12a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1Zm0 6a1 1 0 0 1 1-1h12a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1Zm0 6a1 1 0 0 1 1-1h8a1 1 0 0 1 0 2H4a1 1 0 0 1-1-1Z",
+  reports:
+    "M2 16.5a.75.75 0 0 1 .75-.75h1.5V9a.75.75 0 0 1 1.5 0v6.75h1.5V5a.75.75 0 0 1 1.5 0v10.75h1.5V7.5a.75.75 0 0 1 1.5 0v8.25h1.5V3a.75.75 0 0 1 1.5 0v13.25h1.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 16.5Z",
   services: "M3 4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15.5v-11Zm2 .5v3h4V5H5Zm6 0v3h4V5h-4ZM5 10v4h4v-4H5Zm6 0v4h4v-4h-4Z",
   settings: "M9.5 2a1 1 0 0 1 1 1v.5a6.5 6.5 0 0 1 1.6.66l.35-.35a1 1 0 1 1 1.42 1.42l-.35.35c.3.5.52 1.04.66 1.6H15a1 1 0 1 1 0 2h-.5a6.5 6.5 0 0 1-.66 1.6l.35.35a1 1 0 0 1-1.42 1.42l-.35-.35a6.5 6.5 0 0 1-1.6.66v.5a1 1 0 1 1-2 0v-.5a6.5 6.5 0 0 1-1.6-.66l-.35.35A1 1 0 0 1 5.5 12.6l.35-.35A6.5 6.5 0 0 1 5.2 10.6H4.7a1 1 0 1 1 0-2h.5c.14-.56.36-1.1.66-1.6l-.35-.35A1 1 0 0 1 6.93 4.4l.35.35c.5-.3 1.04-.52 1.6-.66V3a1 1 0 0 1 .62-1Zm.5 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z",
   display: "M3 4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5v8a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 12.5v-8ZM7 16a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2H7Z",
@@ -23,6 +33,7 @@ const ICONS: Record<Tab, string> = {
 const ADMIN_TABS: { id: Tab; label: string }[] = [
   { id: "call", label: "Llamados" },
   { id: "turns", label: "Turnos" },
+  { id: "reports", label: "Reportes" },
   { id: "services", label: "Servicios" },
   { id: "users", label: "Usuarios" },
   { id: "settings", label: "Impresion" },
@@ -121,6 +132,7 @@ export default function App() {
         {!isAdmin && <CallPanel />}
         {isAdmin && tab === "call" && <CallPanel />}
         {isAdmin && tab === "turns" && <AdminTurns />}
+        {isAdmin && tab === "reports" && <AdminReports />}
         {isAdmin && tab === "services" && <AdminServices />}
         {isAdmin && tab === "settings" && <AdminSettings />}
         {isAdmin && tab === "display" && <AdminDisplay />}
