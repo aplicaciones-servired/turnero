@@ -11,6 +11,7 @@ import { AgentsReport } from "./reports/AgentsReport";
 import { CallsReport } from "./reports/CallsReport";
 import { DemandReport } from "./reports/DemandReport";
 import { RatingsReport } from "./reports/RatingsReport";
+import { PresencePanel } from "./reports/PresencePanel";
 import { monthRange, shiftDay, todayLima, type ReportFilters } from "./reports/utils";
 
 type ReportTab =
@@ -142,6 +143,8 @@ export function AdminReports() {
           </div>
         }
       />
+
+      <PresencePanel />
 
       <Card className="p-4">
         <div className="flex flex-wrap items-end gap-3">

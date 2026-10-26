@@ -82,6 +82,25 @@ export interface SnapshotDTO {
   waiting: TurnDTO[];
 }
 
+/** Usuario con al menos una sesion abierta en el turnero. */
+export interface PresenceUser {
+  id: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  counterName: string | null;
+  connectedAt: string;
+  sessions: number;
+}
+
+/** Presencia en vivo de las cajeras conectadas. */
+export interface PresenceSnapshot {
+  cashiers: PresenceUser[];
+  total: number;
+  admins: number;
+  updatedAt: string;
+}
+
 /** Mapa de eventos emitidos del servidor -> cliente */
 export interface ServerToClientEvents {
   "turn:created": (turn: TurnDTO) => void;
@@ -89,6 +108,7 @@ export interface ServerToClientEvents {
   "turn:finished": (turn: TurnDTO) => void;
   "turn:skipped": (turn: TurnDTO) => void;
   "queue:updated": (snapshot: SnapshotDTO) => void;
+  "presence:updated": (snapshot: PresenceSnapshot) => void;
 }
 
 /** Mapa de eventos emitidos del cliente -> servidor */

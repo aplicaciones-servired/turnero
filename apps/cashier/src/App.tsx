@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "./auth";
+import { usePresence } from "./presence";
 import { useRealtime } from "./useRealtime";
 import { Login } from "./components/Login";
 import { CallPanel } from "./components/CallPanel";
@@ -51,7 +52,8 @@ function TabIcon({ id, className }: { id: Tab; className?: string }) {
 export default function App() {
   const { user, ready, restore, logout } = useAuth();
   const [tab, setTab] = useState<Tab>("call");
-  useRealtime();
+  const presence = usePresence((state) => state.snapshot);
+  useRealtime(Boolean(user));
 
   useEffect(() => {
     restore();
@@ -82,6 +84,13 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <span
+            aria-label={`Cajeras conectadas: ${presence ? presence.total : "sin datos"}`}
+            className="hidden items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-xs font-medium text-emerald-100 sm:flex"
+          >
+            <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+            Cajeras: {presence ? presence.total : "—"}
+          </span>
           <div className="hidden text-right sm:block">
             <p className="font-medium text-slate-100">{user.displayName}</p>
             <p className="text-[11px] uppercase tracking-wide text-slate-400">
