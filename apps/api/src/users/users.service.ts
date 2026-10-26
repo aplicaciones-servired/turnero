@@ -4,10 +4,12 @@ import {
   Injectable,
   NotFoundException,
 } from "@nestjs/common";
-import { InjectModel } from "@nestjs/sequelize";
+import { InjectConnection, InjectModel } from "@nestjs/sequelize";
 import { ConfigService } from "@nestjs/config";
+import type { Sequelize, Transaction } from "sequelize";
 import * as crypto from "crypto";
 import type { AuthUser, UserDTO, UserRole } from "@turnero/shared";
+import { RelacionUsUser } from "../models/relacionususer.model";
 import { Usuario } from "../models/usuario.model";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserDto } from "./dto/update-user.dto";
@@ -20,6 +22,8 @@ const CASHIER_ROLE = "ASESOR";
 export class UsersService {
   constructor(
     @InjectModel(Usuario) private readonly model: typeof Usuario,
+    @InjectModel(RelacionUsUser) private readonly relationModel: typeof RelacionUsUser,
+    @InjectConnection() private readonly sequelize: Sequelize,
     private readonly config: ConfigService
   ) {}
 
@@ -169,15 +173,23 @@ export class UsersService {
     return this.toDto(user);
   }
 
-  async remove(id: string, currentUserId?: string): Promise<{ id: string; active: false }> {
+  async remove(id: string, currentUserId?: string): Promise<{ id: string }> {
     const numericId = Number(id);
     if (!Number.isFinite(numericId)) throw new BadRequestException("Usuario invalido.");
     if (currentUserId != null && Number(currentUserId) === numericId) {
       throw new BadRequestException("No puedes eliminar tu propio usuario.");
     }
-    const user = await this.model.findByPk(numericId);
-    if (!user) throw new NotFoundException("Usuario no encontrado.");
-    await user.update({ Eliminado: 1 });
-    return { id: String(numericId), active: false };
+
+    return this.sequelize.transaction(async (transaction: Transaction) => {
+      const user = await this.model.findByPk(numericId, { transaction });
+      if (!user) throw new NotFoundException("Usuario no encontrado.");
+
+      await this.relationModel.destroy({
+        where: { IdUsuario: numericId },
+        transaction,
+      });
+      await user.destroy({ transaction });
+      return { id: String(numericId) };
+    });
   }
 }

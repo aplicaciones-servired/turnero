@@ -79,7 +79,7 @@ export function AdminUsers() {
     mutationFn: async (id: string) => api.delete(`/users/${id}`),
     onSuccess: async () => {
       await invalidate();
-      setNotice({ tone: "success", text: "Usuario eliminado." });
+      setNotice({ tone: "success", text: "Usuario eliminado permanentemente." });
       setToDelete(null);
     },
     onError: (e) => {
@@ -149,7 +149,7 @@ export function AdminUsers() {
     <div className="mx-auto max-w-5xl space-y-5 p-6">
       <PageHeader
         title="Usuarios"
-        subtitle="Crea, edita o desactiva los usuarios del turnero (base MagisoftV1). Los administradores ven todo el panel; los asesores solo el modulo de llamados."
+        subtitle="Crea, edita o elimina permanentemente los usuarios del turnero (base MagisoftV1). Los administradores ven todo el panel; los asesores solo el modulo de llamados."
         actions={
           <Button onClick={openCreate}>
             <svg viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
@@ -350,9 +350,9 @@ export function AdminUsers() {
         }
       >
         <p className="text-sm text-slate-600">
-          ¿Seguro que deseas eliminar a{" "}
-          <strong className="text-slate-800">{toDelete?.displayName}</strong>? El usuario quedara
-          inactivo y no podra iniciar sesion.
+          ¿Seguro que deseas eliminar permanentemente a{" "}
+          <strong className="text-slate-800">{toDelete?.displayName}</strong>? Esta acción no se
+          puede deshacer. Se conservarán sus registros históricos.
         </p>
       </Modal>
     </div>
