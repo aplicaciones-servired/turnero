@@ -347,8 +347,8 @@ function anunciarLlamado(turn, modulo) {
     var llamado = formatearLlamado(nombre, tipo);
     //
     var htmlTurno = '<div class="turno-grande" style="background: rgb(147, 226, 250);width: 80%;height: 80%;display: flex;flex-direction: column;justify-content: center;align-items: center; text-align: center; border: 1px solid black; overflow: hidden;">';
-    htmlTurno += '<h1 style="font-size: clamp(4vw, 14vw, 12vh); color:red; margin: 0; line-height: 1.1; white-space: normal; word-break: break-word;">' + tipo + ', ' + nombre + '</h1>';
-    htmlTurno += '<h2 style="font-size: clamp(3vw, 10vw, 9vh); color:red; margin: 2vh 0 0 0; line-height: 1.1; white-space: normal; word-break: break-word;">' + (modulo || "") + '</h2></div>';
+    htmlTurno += '<h1 style="font-size: clamp(5vw, 18vw, 18vh); color:red; margin: 0; line-height: 1.1; white-space: normal; word-break: break-word;">' + tipo + ', ' + nombre + '</h1>';
+    htmlTurno += '<h2 style="font-size: clamp(4vw, 14vw, 14vh); color:red; margin: 2vh 0 0 0; line-height: 1.1; white-space: normal; word-break: break-word;">' + (modulo || "") + '</h2></div>';
     //
     var volumenVoz = 0;
     //
