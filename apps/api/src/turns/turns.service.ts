@@ -66,6 +66,7 @@ export class TurnsService {
   // servicio. Evita consultar el historial en cada turno: solo la primera vez
   // que se genera un turno de ese servicio en el dia.
   private readonly diaTurnos = new Map<number, string>();
+  private writeChain: Promise<void> = Promise.resolve();
 
   constructor(
     @InjectModel(Servicio) private readonly servicioModel: typeof Servicio,
@@ -90,6 +91,15 @@ export class TurnsService {
     this.estadoCancelado = this.config.get<string>("ESTADO_CANCELADO") ?? "CANCELADO";
     this.sedeId = Number(this.config.get<string>("SEDE_ID") ?? 12);
     this.empId = Number(this.config.get<string>("EMP_ID") ?? 12);
+  }
+
+  private enqueueWrite<T>(task: () => Promise<T>): Promise<T> {
+    const result = this.writeChain.then(task);
+    this.writeChain = result.then(
+      () => undefined,
+      () => undefined
+    );
+    return result;
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -140,7 +150,13 @@ export class TurnsService {
   // ─────────────────────────────────────────────────────────────
 
   /** Genera un turno (bloquea el servicio), lo guarda en tablatemporal/auditoria y lo imprime. */
-  async generate(
+  generate(
+    serviceId: string
+  ): Promise<{ turn: TurnDTO; printed: boolean; ticket?: string }> {
+    return this.enqueueWrite(() => this.generateLocked(serviceId));
+  }
+
+  private async generateLocked(
     serviceId: string
   ): Promise<{ turn: TurnDTO; printed: boolean; ticket?: string }> {
     const idServicio = Number(serviceId);
@@ -336,7 +352,11 @@ export class TurnsService {
   // ─────────────────────────────────────────────────────────────
 
   /** Llamar: toma el siguiente turno del usuario (Aplazados -> prioridad). */
-  async call(user: AuthUser): Promise<CallTurnPayload> {
+  call(user: AuthUser): Promise<CallTurnPayload> {
+    return this.enqueueWrite(() => this.callLocked(user));
+  }
+
+  private async callLocked(user: AuthUser): Promise<CallTurnPayload> {
     const userId = this.userId(user);
     const serviceIds = await this.allowedServiceIds(user);
 
@@ -351,13 +371,24 @@ export class TurnsService {
   }
 
   /** Llamar un turno especifico (por IdTablaTemporal). */
-  async callById(id: string, user: AuthUser): Promise<CallTurnPayload> {
+  callById(id: string, user: AuthUser): Promise<CallTurnPayload> {
+    return this.enqueueWrite(() => this.callByIdLocked(id, user));
+  }
+
+  private async callByIdLocked(id: string, user: AuthUser): Promise<CallTurnPayload> {
     const row = await this.findTabla(id);
     return this.marcarLlamado(row, user);
   }
 
   /** Llamar individual: siguiente turno de un servicio concreto. */
-  async callService(serviceId: number, user: AuthUser): Promise<CallTurnPayload> {
+  callService(serviceId: number, user: AuthUser): Promise<CallTurnPayload> {
+    return this.enqueueWrite(() => this.callServiceLocked(serviceId, user));
+  }
+
+  private async callServiceLocked(
+    serviceId: number,
+    user: AuthUser
+  ): Promise<CallTurnPayload> {
     const userId = this.userId(user);
     const serviceIds = await this.allowedServiceIds(user);
     if (serviceIds !== null && !serviceIds.includes(serviceId)) {
@@ -374,13 +405,21 @@ export class TurnsService {
   }
 
   /** Repite el llamado en pantalla (re-inserta en tv). */
-  async repeat(id: string, user: AuthUser): Promise<CallTurnPayload> {
+  repeat(id: string, user: AuthUser): Promise<CallTurnPayload> {
+    return this.enqueueWrite(() => this.repeatLocked(id, user));
+  }
+
+  private async repeatLocked(id: string, user: AuthUser): Promise<CallTurnPayload> {
     const row = await this.findTabla(id);
     return this.marcarLlamado(row, user, true);
   }
 
   /** LlamarTurnoEspecifico: envia un turno concreto a todas las pantallas. */
-  async callSpecific(turno: string, modulo: string): Promise<{ ok: true }> {
+  callSpecific(turno: string, modulo: string): Promise<{ ok: true }> {
+    return this.enqueueWrite(() => this.callSpecificLocked(turno, modulo));
+  }
+
+  private async callSpecificLocked(turno: string, modulo: string): Promise<{ ok: true }> {
     const visualizadores = await this.allVisualizadores();
     let next = Number((await this.tvModel.max("IdTv")) ?? 0) + 1;
     for (const v of visualizadores) {
@@ -546,7 +585,14 @@ export class TurnsService {
   }
 
   /** Transferir turno a otro servicio. */
-  async transfer(input: TransferTurnInput, user: AuthUser): Promise<{ ok: true }> {
+  transfer(input: TransferTurnInput, user: AuthUser): Promise<{ ok: true }> {
+    return this.enqueueWrite(() => this.transferLocked(input, user));
+  }
+
+  private async transferLocked(
+    input: TransferTurnInput,
+    user: AuthUser
+  ): Promise<{ ok: true }> {
     const now = new Date();
     const userId = this.userId(user);
     const transaction = await this.sequelize.transaction();
