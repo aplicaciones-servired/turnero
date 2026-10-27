@@ -151,4 +151,8 @@ export class TurnsGateway implements OnGatewayConnection, OnGatewayDisconnect {
   emitQueueUpdated(snapshot: SnapshotDTO) {
     this.server.emit("queue:updated", snapshot);
   }
+
+  emitVideosUpdated() {
+    this.server.emit("videos:updated");
+  }
 }

@@ -8,6 +8,7 @@ import { AdminTurns } from "./components/AdminTurns";
 import { AdminServices } from "./components/AdminServices";
 import { AdminSettings } from "./components/AdminSettings";
 import { AdminDisplay } from "./components/AdminDisplay";
+import { AdminVideos } from "./components/AdminVideos";
 import { AdminUsers } from "./components/AdminUsers";
 import { AdminReports } from "./components/AdminReports";
 
@@ -18,6 +19,7 @@ type Tab =
   | "services"
   | "settings"
   | "display"
+  | "videos"
   | "users";
 
 const ICONS: Record<Tab, string> = {
@@ -28,6 +30,7 @@ const ICONS: Record<Tab, string> = {
   services: "M3 4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 15.5v-11Zm2 .5v3h4V5H5Zm6 0v3h4V5h-4ZM5 10v4h4v-4H5Zm6 0v4h4v-4h-4Z",
   settings: "M9.5 2a1 1 0 0 1 1 1v.5a6.5 6.5 0 0 1 1.6.66l.35-.35a1 1 0 1 1 1.42 1.42l-.35.35c.3.5.52 1.04.66 1.6H15a1 1 0 1 1 0 2h-.5a6.5 6.5 0 0 1-.66 1.6l.35.35a1 1 0 0 1-1.42 1.42l-.35-.35a6.5 6.5 0 0 1-1.6.66v.5a1 1 0 1 1-2 0v-.5a6.5 6.5 0 0 1-1.6-.66l-.35.35A1 1 0 0 1 5.5 12.6l.35-.35A6.5 6.5 0 0 1 5.2 10.6H4.7a1 1 0 1 1 0-2h.5c.14-.56.36-1.1.66-1.6l-.35-.35A1 1 0 0 1 6.93 4.4l.35.35c.5-.3 1.04-.52 1.6-.66V3a1 1 0 0 1 .62-1Zm.5 4.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z",
   display: "M3 4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5v8a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 12.5v-8ZM7 16a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2H7Z",
+  videos: "M4 3a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H4Zm1 2h2v2H5V5Zm8 0h2v2h-2V5Zm-8 8h2v2H5v-2Zm8 0h2v2h-2v-2Zm-5-5.5v5l4-2.5-4-2.5Z",
   users: "M7 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm6.5.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5ZM2 15.5C2 13 4.24 11 7 11s5 2 5 4.5V17H2v-1.5Zm12 1.5v-1c0-1-.3-1.94-.83-2.72.42-.18.88-.28 1.33-.28 2.02 0 3.5 1.34 3.5 3V17h-4Z",
 };
 
@@ -39,6 +42,7 @@ const ADMIN_TABS: { id: Tab; label: string }[] = [
   { id: "users", label: "Usuarios" },
   { id: "settings", label: "Impresion" },
   { id: "display", label: "Pantalla (APK)" },
+  { id: "videos", label: "Videos" },
 ];
 
 function TabIcon({ id, className }: { id: Tab; className?: string }) {
@@ -147,6 +151,7 @@ export default function App() {
         {isAdmin && tab === "services" && <AdminServices />}
         {isAdmin && tab === "settings" && <AdminSettings />}
         {isAdmin && tab === "display" && <AdminDisplay />}
+        {isAdmin && tab === "videos" && <AdminVideos />}
         {isAdmin && tab === "users" && <AdminUsers />}
       </main>
     </div>

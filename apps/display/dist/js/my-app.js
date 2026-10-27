@@ -232,6 +232,17 @@ function iniciarSocket() {
     socket.on('turn:skipped', function (turn) {
         quitarLlamado(turn);
     });
+    //
+    socket.on('videos:updated', function () {
+        // Si la pantalla quedo en el video de respaldo porque fallaron todos,
+        // un video nuevo debe devolverla a la lista real.
+        if (videoFallback) {
+            videoA = 0;
+            videoFallas = 0;
+            videoFallback = false;
+        }
+        cargarVideos(false);
+    });
 }
 
 //
@@ -504,6 +515,18 @@ function actualizarVideos() {
     //
     var videoR = document.getElementById("video");
     videoR.muted = true;
+    //
+    // Sin videos no se intenta el respaldo: evita un bucle de peticiones 404
+    // cuando el admin elimina todos los videos.
+    if (arrayV.length === 0) {
+        videoA = 0;
+        videoFallas = 0;
+        videoFallback = false;
+        videoR.pause();
+        videoR.removeAttribute("src");
+        videoR.load();
+        return;
+    }
     //
     if (videoA >= arrayV.length) {
         //

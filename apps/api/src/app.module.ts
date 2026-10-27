@@ -17,6 +17,7 @@ import { VisualizerModule } from "./visualizer/visualizer.module";
 import { ModulosModule } from "./modulos/modulos.module";
 import { TtsModule } from "./tts/tts.module";
 import { ReportsModule } from "./reports/reports.module";
+import { MediaModule } from "./media/media.module";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { ReportsModule } from "./reports/reports.module";
     ModulosModule,
     TtsModule,
     ReportsModule,
+    MediaModule,
   ],
   controllers: [AppController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

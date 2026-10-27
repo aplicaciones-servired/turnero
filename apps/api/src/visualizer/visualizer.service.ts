@@ -1,7 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { InjectModel } from "@nestjs/sequelize";
-import { readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { listVideoFiles } from "../media/video-files";
 import { Configtv } from "../models/configtv.model";
 import { Tv } from "../models/tv.model";
 import { Video } from "../models/video.model";
@@ -121,23 +120,15 @@ export class VisualizerService {
     return out;
   }
 
-  /** Videos disponibles en disco, ordenados por su número de archivo. */
+  /** Videos disponibles en disco, en el orden en que se subieron. */
   async availableVideos(): Promise<VisualizerVideo[]> {
-    const directory = join(__dirname, "..", "..", "public", "media", "videos");
-    const files = await readdir(directory, { withFileTypes: true });
+    const files = await listVideoFiles();
 
-    return files
-      .filter((file) => file.isFile() && /^video\d+\.mp4$/i.test(file.name))
-      .sort((a, b) => {
-        const numberA = Number(a.name.match(/\d+/)?.[0]);
-        const numberB = Number(b.name.match(/\d+/)?.[0]);
-        return numberA - numberB;
-      })
-      .map((file, index) => ({
-        idVideo: index + 1,
-        nombreVideo: file.name.replace(/\.mp4$/i, ""),
-        volumen: 0,
-      }));
+    return files.map((file, index) => ({
+      idVideo: index + 1,
+      nombreVideo: file.fileName.replace(/\.mp4$/i, ""),
+      volumen: 0,
+    }));
   }
 
   /** Llamado vigente de la pantalla, sin consumirlo (para el visor web). */

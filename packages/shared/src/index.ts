@@ -109,6 +109,7 @@ export interface ServerToClientEvents {
   "turn:skipped": (turn: TurnDTO) => void;
   "queue:updated": (snapshot: SnapshotDTO) => void;
   "presence:updated": (snapshot: PresenceSnapshot) => void;
+  "videos:updated": () => void;
 }
 
 /** Mapa de eventos emitidos del cliente -> servidor */
